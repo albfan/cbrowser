@@ -1,6 +1,6 @@
 # -*- tcl -*-
 
-# $Id: builder.tcl,v 1.1 2000/06/26 19:23:59 cfelaco Exp $
+# $Id: builder.tcl,v 1.2 2000/07/09 19:31:44 cfelaco Exp $
 
 # Cbrowser is a C/C++ source code indexing, querying and browsing tool
 # Copyright (C) 1998  B. Christopher Felaco
@@ -26,6 +26,9 @@
 # with enhancements or suggestions.
 
 # $Log: builder.tcl,v $
+# Revision 1.2  2000/07/09 19:31:44  cfelaco
+# Fixes for NT and freewrap.
+#
 # Revision 1.1  2000/06/26 19:23:59  cfelaco
 # Initial source file revisions for sourceforge.net.
 # Existing revision history is based on RCS revisions made by original author
@@ -254,7 +257,7 @@ proc build_file_select {entry} {
 
 proc build_database {toplevel new_dbase backend unconditional reserved \
                          {source_list {}} {include_list {}}} {
-  global env build_status database_file
+  global env tcl_platform build_status database_file 
 
   if {[strcmp $new_dbase $database_file] == 0} {
     global query_pipe
@@ -291,22 +294,24 @@ proc build_database {toplevel new_dbase backend unconditional reserved \
       #set env(SOURCEDIRS) [join $source_list ":"]
       set env(INCLUDEDIRS) [join $include_list ":"]
 
-      set cmd [concat "|$backend -b -f $new_dbase " $source_list]
+      set cmd [concat "|$backend -b -f [file tail $new_dbase] " $source_list]
       if {$unconditional} {
         lappend cmd "-u"
       }
     }
     "xz" {
-      if {$reserved} {set flag "-w"}
-      set cmd [concat "|$backend -t 1 $flag -ny -f $new_dbase " $source_list]
+      if {$reserved} {set flag "-w"} else {set flag ""}
+      set cmd [concat "|$backend -t 1 $flag -ny -f [file tail $new_dbase] " $source_list]
     }
     default {
       error "Unknown backend program \"$backend\"."
     }
   }
 
-  lappend cmd "|&" "cat"
-  if [catch {open $cmd "r"} f] {
+  if {[strcmp $tcl_platform(platform) "unix"] == 0} {
+    lappend cmd "|&" "cat"
+  }
+  if [catch {open "$cmd" "r"} f] {
     global errorInfo errorCode
     set info $errorInfo; set code $errorCode
     wm withdraw $toplevel
@@ -503,11 +508,16 @@ proc build_abort {pipe} {
 ##############################################################################
 
 proc build_get_xz_modules {dbname} {
-  set lines [exec echo .M | xz -f $dbname]
+
+  # Start up xz
+  set f [open "| xz -f $dbname" "r+"]
+
+  # Request the list of all modules
+  puts $f ".M"
 
   set modules {}
-  foreach line [split $lines "\n"] {
-    lappend modules [lindex $line 0]
+  while {[gets $f line] > 0} {
+    lappend modules [lindex [split $line ","] 0]
   }
   return $modules
 }

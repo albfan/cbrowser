@@ -2,7 +2,7 @@
 # restart using wish \
 exec wish -f "$0" "$@"
 
-# $Id: cbrowser,v 1.1 2000/06/26 19:23:59 cfelaco Exp $
+# $Id: cbrowser,v 1.2 2000/07/09 19:31:44 cfelaco Exp $
 
 # Cbrowser is a C/C++ source code indexing, querying and browsing tool
 # Copyright (C) 1998,2000  B. Christopher Felaco
@@ -28,6 +28,9 @@ exec wish -f "$0" "$@"
 # enhancements or suggestions.
 
 # $Log: cbrowser,v $
+# Revision 1.2  2000/07/09 19:31:44  cfelaco
+# Fixes for NT and freewrap.
+#
 # Revision 1.1  2000/06/26 19:23:59  cfelaco
 # Initial source file revisions for sourceforge.net.
 # Existing revision history is based on RCS revisions made by original author
@@ -320,7 +323,7 @@ proc setup_menubar {root} {
 
   set_root_base $root
 
-  global tcl_version
+  global tcl_version tcl_platform
   if {$tcl_version < 8.0} {
     frame $base.menubar -borderwidth 2 -relief raised
 
@@ -366,7 +369,10 @@ proc setup_menubar {root} {
     $menu add cascade -label "Select" -underline 0 -menu $select_menu
     $menu add cascade -label "History" -underline 0 -menu $history_menu
     $menu add cascade -label "Options" -underline 0 -menu $options_menu
-    $menu add separator
+    # On UNIX add a separator to push the Help menu to the end
+    if {[strcmp $tcl_platform(platform) "unix"] == 0} {
+      $menu add separator
+    }
     $menu add cascade -label "Help" -underline 0 -menu $help_menu
     $root configure -menu $menu
   }
@@ -941,6 +947,8 @@ proc query_execute {query_type value} {
     error "A query is already in progress."
   }
 
+  set tmpfile [file join $tmpdir "cbrowser_[pid]"]
+
   # Make sure the value has no leading or trailing spaces
   set value [string trim $value]
 
@@ -984,7 +992,7 @@ proc query_execute {query_type value} {
     # Cancel handler
     #fileevent $query_pipe readable ""
   } elseif {[strcmp $query_status "abort"] == 0 ||
-            [file size "$tmpdir/cbrowser_[pid]"] > 0} {
+            [file size $tmpfile] > 0} {
 
     # The process must be killed, or the file close will hang
     eval exec kill [pid $query_pipe]
@@ -998,9 +1006,12 @@ proc query_execute {query_type value} {
 
     set query_status none
 
-    if {[file size "$tmpdir/cbrowser_[pid]"] > 0} {
-      if [catch {exec cat "$tmpdir/cbrowser_[pid]"} errmsg] {
-        error "Ack!"
+    if {[file size $tmpfile] > 0} {
+      if [catch {
+        set errfile [open $tmpfile "r"]
+        set errmsg [read $errfile]
+      } errmsg] {
+        error "Error in process, unable to read error result."
       } else {
         error $errmsg
       }
@@ -1100,6 +1111,8 @@ proc query_line {line} {
 
   global query_backend
   if {[strcmp $query_backend "xz"] == 0} {
+    # XZ 3.1 uses CSV format for output
+    set line [split $line ","]
     if {[llength $line] >= 5} {
       # Split the list into variables
       if {[llength $line] > 5} {
@@ -1294,16 +1307,19 @@ proc query_open {dbase_file} {
   # directory where it was built.
   set pwd [pwd]
   cd [file dirname $dbase_file]
+  # Use just the file name, to avoid the problem with the backslashes
+  set dbase_file [file tail $dbase_file]
 
   # Start backend program to perform the query and open a pipe to receive the
   # results.
-  catch {file delete "$tmpdir/cbrowser_[pid]"}
+  set tmpfile [file join $tmpdir "cbrowser_[pid]"]
+  catch {file delete $tmpfile}
   if {[strcmp $query_backend "xz"] == 0} {
-    set cmdline "|$query_backend -i -s -f $dbase_file 2> $tmpdir/cbrowser_[pid]"
+    set cmdline "|$query_backend -i -s -f $dbase_file 2> $tmpfile"
   } else {
-    set cmdline "|$query_backend -d -l -f $dbase_file 2> $tmpdir/cbrowser_[pid]"
+    set cmdline "|$query_backend -d -l -f $dbase_file 2> $tmpfile"
   }
-  if [catch {open $cmdline "r+"} f] {
+  if [catch {open "$cmdline" "r+"} f] {
     global errorInfo errorCode
     error "Unable to execute query_backend: $f" $errorInfo $errorCode
   }
@@ -1314,7 +1330,6 @@ proc query_open {dbase_file} {
     if {[strcmp $prefix $prompt] == 0} { break }
     gets $f
   }
-             
 
   # Don't let the pipe plug up the works
   fconfigure $f -blocking 0 -buffering none
@@ -2983,18 +2998,24 @@ if [info exists env(TMP)] {
 } else {
   error "Please create /tmp or set TMP to the a directory for temporary files."
 }
+# Convert the path separators to standard slashes
+set tmpdir [eval file join [file split $tmpdir]]
 
-# Determine where cbrowser really lives
-set link $argv0
-while {![catch {file readlink $link} result]} {
-  set link [file join [file dirname $link] $result]
+if {![info exists _freewrap_program]} {
+  # Determine where cbrowser really lives
+  set link $argv0
+  while {![catch {file readlink $link} result]} {
+    set link [file join [file dirname $link] $result]
+  }
+  set sourcedir [file dirname $link]
+} else {
+  set sourcedir "cbrowser-0.9"
 }
-set sourcedir [file dirname $link]
+
 # Set up the auto_path to find things in the directory where this lives.
 lappend auto_path $sourcedir
-
 # Load the utility library
-source [file join $sourcedir ftcllib.tcl]
+source [file join $sourcedir "ftcllib.tcl"]
 
 catch {
   switch $tcl_platform(platform) {
@@ -3332,7 +3353,9 @@ Please use this name next time."
 
 # Register the window for proper session management
 wm command . "$argv0 $argv"
-wm client . [exec uname -n]
+# I don't remember why I used uname instead of the info command...
+#wm client . [exec uname -n]
+wm client . [info hostname]
 wm protocol . WM_SAVE_YOURSELF {wm command . "$argv0 $database_file"}
 
 #Local Variables:
