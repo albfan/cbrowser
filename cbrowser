@@ -2,10 +2,10 @@
 # restart using wish \
 exec wish -f "$0" "$@"
 
-# $Id: cbrowser,v 1.2 2000/07/09 19:31:44 cfelaco Exp $
+# $Id: cbrowser,v 1.3 2000/07/30 07:38:53 cfelaco Exp $
 
 # Cbrowser is a C/C++ source code indexing, querying and browsing tool
-# Copyright (C) 1998,2000  B. Christopher Felaco
+# Copyright (C) 1998-2000  B. Christopher Felaco
 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -21,13 +21,18 @@ exec wish -f "$0" "$@"
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
-# For more information about Cbrowser and it's author see:
+# For more information about Cbrowser and its author see:
 #    URL:http://cbrowser.sourceforge.net/
 #
 # Feel free to contact me at URL:mailto:cfelaco@users.sourceforge.net with 
 # enhancements or suggestions.
 
 # $Log: cbrowser,v $
+# Revision 1.3  2000/07/30 07:38:53  cfelaco
+# Finally fixed syntax highlighting bug.
+# Updated URLs for Jeff Hobbs' stuff.
+# Corrected typos in headers (thanks foka).
+#
 # Revision 1.2  2000/07/09 19:31:44  cfelaco
 # Fixes for NT and freewrap.
 #
@@ -1113,6 +1118,10 @@ proc query_line {line} {
   if {[strcmp $query_backend "xz"] == 0} {
     # XZ 3.1 uses CSV format for output
     set line [split $line ","]
+    if {[llength $line] == 1} {
+      # Must be using older xz
+      set line [lindex $line 0]
+    }
     if {[llength $line] >= 5} {
       # Split the list into variables
       if {[llength $line] > 5} {
@@ -1122,9 +1131,16 @@ proc query_line {line} {
         set function ""
       }
 
+      # Ensure that the line number is an integer
+      if [catch {set $linenum [expr {int($linenum)}]}] {
+        # If the linenum is invalid, show the first line
+        set linenum 1
+      }
+
       set rest [list $tokentype $tokenclass]
       return [list $fullpath $function $linenum $rest]
     } else {
+      puts "Less than 5 elements."
       return -code continue
     }
   } else {
@@ -1138,6 +1154,12 @@ proc query_line {line} {
       foreach {fullpath function linenum} $data {}
       # Set the rest to everything after the first three elements
       set rest [string range $line [expr [strlen $data]+1] end]
+
+      # Ensure that the line number is an integer
+      if [catch {set $linenum [expr {int($linenum)}]}] {
+        # If the linenum is invalid, show the first line
+        set linenum 1
+      }
 
       return [list $fullpath $function $linenum $rest]
     } else {
@@ -1612,7 +1634,7 @@ proc query_next_item {root} {
 
   set current [$listbox curselection]
   set end [$listbox index end]
-  set next [expr $current + 1]
+  set next [expr {$current + 1}]
   if {$next < $end} {
     $listbox selection clear $current
     $listbox selection set $next
@@ -1639,7 +1661,7 @@ proc query_prev_item {root} {
   set listbox $base.result_list
 
   set current [$listbox curselection]
-  set prev [expr $current - 1]
+  set prev [expr {$current - 1}]
   if {$prev >= 0} {
     $listbox selection clear $current
     $listbox selection set $prev
@@ -1680,7 +1702,7 @@ proc query_next_file {root} {
   } 
 
   if {$next >= $end} {
-    set next [expr $end - 1]
+    set next [expr {$end - 1}]
   }
 
   $listbox selection clear $current
@@ -1763,7 +1785,7 @@ proc query_next_directory {root} {
   } 
 
   if {$next >= $end} {
-    set next [expr $end - 1]
+    set next [expr {$end - 1}]
   }
 
   $listbox selection clear $current
@@ -1844,7 +1866,7 @@ proc query_next_function {root} {
   } 
 
   if {$next >= $end} {
-    set next [expr $end - 1]
+    set next [expr {$end - 1}]
   }
 
   $listbox selection clear $current
@@ -2502,7 +2524,7 @@ proc other_editor {root name command} {
 
     # Add the other editor to the standard menu
     global editor_menu
-    set index [expr [$editor_menu index end] - 1]
+    set index [expr {[$editor_menu index end] - 1}]
     $editor_menu insert $index radio -label $name \
         -variable editor -value $name
   }
@@ -3047,7 +3069,7 @@ catch {
 # but I don't think it's a permanent solution.
 #event add <<Paste>> <Button-3>
 
-# Enabe the scroll wheel on the mouse
+# Enable the scroll wheel on the mouse
 setup_scroll_bindings Text
 
 # Create the arrow image

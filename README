@@ -18,7 +18,7 @@
    along with this program; if not, write to the Free Software
    Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
    
-   For more information about Cbrowser and it's author see:
+   For more information about Cbrowser and its author see:
       URL:http://cbrowser.sourceforge.net/
    
    Feel free to contact me at URL:mailto:cfelaco@users.sourceforge.net with
@@ -36,11 +36,11 @@
 
    Licensing information can be obtained at:
 
-      URL:http://www.cs.uoregon.edu/research/tcl/script/tkcon/docs/license.terms
+      URL:http://www.hobbs.wservice.com/tcl/script/tkcon/docs/license.terms
 
    For more information and how to get the rest of the package see
 
-       URL:http://www.cs.uoregon.edu/research/tcl/script/widget/
+       URL:http://www.hobbs.wservice.com/tcl/script/widget/
 
    ----------------------------------------------------------------------------
 
@@ -78,7 +78,7 @@
    You will need either cscope or cs.  These tools are obtained separately.
 
      cscope: URL:http://cscope.sourceforge.net/
-     cs: URL:http://cantor.informatik.rwth-aachen.de/~michael/projects/cs.html
+     cs: URL:http://www.moria.de/~michael/cs/
 
    ----------------------------------------------------------------------------
 

@@ -1,9 +1,9 @@
 # -*- tcl -*-
 
-# $Id: calltree.tcl,v 1.1 2000/06/26 19:23:59 cfelaco Exp $
+# $Id: calltree.tcl,v 1.2 2000/07/30 07:38:53 cfelaco Exp $
 
 # Cbrowser is a C/C++ source code indexing, querying and browsing tool
-# Copyright (C) 1998  B. Christopher Felaco
+# Copyright (C) 1998-2000  B. Christopher Felaco
 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -19,13 +19,18 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
-# For more information about Cbrowser and it's author see:
+# For more information about Cbrowser and its author see:
 #    URL:http://cbrowser.sourceforge.net/
 #
 # Feel free to contact me at URL:mailto:cfelaco@users.sourceforge.net
 # with enhancements or suggestions.
 
 # $Log: calltree.tcl,v $
+# Revision 1.2  2000/07/30 07:38:53  cfelaco
+# Finally fixed syntax highlighting bug.
+# Updated URLs for Jeff Hobbs' stuff.
+# Corrected typos in headers (thanks foka).
+#
 # Revision 1.1  2000/06/26 19:23:59  cfelaco
 # Initial source file revisions for sourceforge.net.
 # Existing revision history is based on RCS revisions made by original author

@@ -1,9 +1,9 @@
 #!/usr/local/bin/wish
 
-# $Id: ftcllib.tcl,v 1.1 2000/06/26 19:23:59 cfelaco Exp $
+# $Id: ftcllib.tcl,v 1.2 2000/07/30 07:38:53 cfelaco Exp $
 
 # Ftcllib is a collection of useful procedures for Tcl/Tk programs.
-# Copyright (C) 1999  B. Christopher Felaco
+# Copyright (C) 1999-2000  B. Christopher Felaco
 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -19,13 +19,18 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
-# For more information about Ftcllib and its author see:
+# For more information about ftcllib and its author see:
 #    URL:http://cbrowser.sourceforge.net/
 #
 # Feel free to contact me at URL:mailto:cfelaco@users.sourceforge.net
 # with enhancements or suggestions.
 
 # $Log: ftcllib.tcl,v $
+# Revision 1.2  2000/07/30 07:38:53  cfelaco
+# Finally fixed syntax highlighting bug.
+# Updated URLs for Jeff Hobbs' stuff.
+# Corrected typos in headers (thanks foka).
+#
 # Revision 1.1  2000/06/26 19:23:59  cfelaco
 # Initial source file revisions for sourceforge.net.
 # Existing revision history is based on RCS revisions made by original author
@@ -1184,10 +1189,8 @@ proc c_highlights { widget } {
     return
   }
 
-  comment_highlight $widget
-  update idletasks
-
-  quote_highlight $widget
+  # Highlight comments and strings all at once
+  c_syntax_highlight $widget
   update idletasks
 
   global keyword_highlight c_keywords_regexp c_typenames_regexp
@@ -1239,6 +1242,63 @@ proc highlight_trace {variable index op} {
 
 ##############################################################################
 #
+#  Purpose    : Highlight C/C++ syntactic elements - comments and quotes.
+#
+#  Parameters : widget - the widget to be acted upon
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc c_syntax_highlight {widget} {
+  # Search for both style comments, and a quote that is not within a character
+  # constant.
+  set start_pattern {/\*|//|[^\\']\"}
+  set tagtype "comment"
+
+  set temp [$widget search -regexp $start_pattern 1.0]
+  while { [strlen $temp] > 0 &&
+          [$widget compare $temp < end] } {
+    set match [$widget get $temp "$temp + 2chars"]
+
+    if {[strcmp $match "//"] == 0} {
+      set endrange [$widget index "$temp lineend"]
+    } elseif {[strcmp $match "/*"] == 0} {
+      set tagtype "comment"
+      # Start searching for the end comment after the start of the comment
+      set endrange [$widget search -regexp {\*/} "$temp + 2chars"]
+      if {[strlen $endrange] == 0} {
+        break
+      } else {
+        # Make the range include the end comment mark
+        set endrange "$endrange + 2chars"
+      }
+    } else { # Must be a quote...
+      set tagtype "quote"
+      # The search for the quote will stop at the character preceding the quote
+      # character, because the search pattern excludes character constants.
+      set temp "$temp + 1chars"
+      # By starting at the first quote, this will automatically handle the
+      # empty string case.
+      set endrange [$widget search -regexp -- {[^\\]\"} "$temp"]
+      if {[strlen $endrange] == 0} {
+        break
+      } else {
+        set endrange "$endrange + 2chars"
+      }
+    }
+    if {[strlen $endrange] != 0} {
+      $widget tag add $tagtype $temp "$endrange"
+      set temp [$widget search -regexp $start_pattern "$endrange + 1chars" end]
+    } else {
+      break
+    }
+  }
+  
+}
+
+##############################################################################
+#
 #  Purpose    : Highlight C/C++ style comments.
 #
 #  Parameters : widget - the widget to be acted upon
@@ -1280,6 +1340,13 @@ proc comment_highlight {widget} {
 #
 #  Result     : NONE
 #
+#  Note       : This function attempted to skirt around comment regions, so
+#               as not to double highlight things.  However, it would fail if
+#               a comment start appeared within a string.  The only correct
+#               way to handle these cases is to perform comment and string
+#               parsing in a single pass, which is now done in the function
+#               c_syntax_highlight.
+#
 ##############################################################################
 
 proc quote_highlight { widget } {
@@ -1288,15 +1355,21 @@ proc quote_highlight { widget } {
 
   # Look in between commented regions for quotes
   foreach {start end} [concat 1.0 [$widget tag ranges comment] end] {
+    puts "start: $start, end: $end"
 
     while {[set temp [$widget search -regexp -- $pattern $start $end]] != ""} {
+      puts "temp: $temp"
 
       set endquote [$widget search -regexp -- {[^\\]\"} "$temp + 1chars" $end]
+      puts "endquote: $temp"
 
       if {[strlen $endquote] > 0} {
         set start [$widget index "$endquote + 2chars"]
 
         $widget tag add quote "$temp + 1chars" $start
+      } else {
+        # If there's no endquote, something's wrong.  Skip this region.
+        break
       }
     }
   }
@@ -1389,6 +1462,7 @@ proc highlight_word {word color widget {range_start 1.0} {range_end end}} {
 ##############################################################################
 
 proc cpp_highlight {widget} {
+  puts ">>> cpp_highlight"
   set pattern \
       [subst -nocommands -novariables \
            {^[ \t\n]*\#[ \t]*(ifdef|ifndef|if|define|undef|include|endif|else)}]
@@ -1405,6 +1479,7 @@ proc cpp_highlight {widget} {
       set start [$widget index "$start lineend +1 char"]
     }
   }
+  puts "<<< cpp_highlight"
   return
 }
 
