@@ -1,0 +1,3340 @@
+#!/bin/sh
+# restart using wish \
+exec wish -f "$0" "$@"
+
+# $Id: cbrowser,v 1.1 2000/06/26 19:23:59 cfelaco Exp $
+
+# Cbrowser is a C/C++ source code indexing, querying and browsing tool
+# Copyright (C) 1998,2000  B. Christopher Felaco
+
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+
+# For more information about Cbrowser and it's author see:
+#    URL:http://cbrowser.sourceforge.net/
+#
+# Feel free to contact me at URL:mailto:cfelaco@users.sourceforge.net with 
+# enhancements or suggestions.
+
+# $Log: cbrowser,v $
+# Revision 1.1  2000/06/26 19:23:59  cfelaco
+# Initial source file revisions for sourceforge.net.
+# Existing revision history is based on RCS revisions made by original author
+# in private repository.
+#
+# Revision 0.7  1999/03/15 01:14:45  chris
+# Add support for 'xz' backend query type.
+# Begin support for NT - not complete until pipe asynch IO problems resolved.
+# Use Tk 8.0 style menus.
+# Remove utility functions now in ftcllib.
+# Add select menu and options for moving to next/prev file/directory/function.
+# Remove Next/Prev buttons from info row.
+#
+# Revision 0.6  1998/10/14 03:28:06  chris
+# Fixed query bug from input that caused hang.
+# Added entry field keyboard history mechanism.
+# Allow keyfocus on query history recall button.
+# New option to spawn separate viewers.
+# Use filter for file and edit menus to enable/disable options.
+# Add Edit menu as third-button popup in viewers.
+# Remove finder dialogs when a new file is displayed.
+# display_clear no longer erroneously clears queries.
+# Use .query_field for all pastes that aren't in another text area.
+# Select the line number in the goto dialog, so immediate typing will clear the
+# value.
+#
+# Revision 0.5  1998/07/16 16:58:04  chris
+# Parametrized more functions.
+# Use -postcommand for dbase recall menu for simplicity.
+# Give focus to the query option menu.
+# Use global query_value variable for .query_field.
+# Magic scrollbars.
+# Use message widget for message bar, with resizable width.
+# Load and save query results.
+# Option to forget empty queries.
+# Use trace for query backend.
+# New goto line dialog.
+# New functions for activity indicator, to separate it from the query logic.
+# New set_callees function for creating the called_by array.
+# New query_line function for parsing the query data.
+# Fixed special characters in saved history.
+# Added start and end points to highlight_word and rewrote for faster
+# performance.
+# All entry fields accept c-backspace and c-delete.
+# Database may be specified on command line.
+# Smarter about default database and backend.
+# Session management - restart using selected database.
+#
+# Revision 0.4  1998/06/27 21:08:22  chris
+# New features:
+# Many changes for the addition of the Call tree - new source file calltree.tcl.
+# Set activebackground and foreground on Submit button.
+# Multiple file viewers allowed, current_file and current_line parametrized.
+# Added <<Help>> virtual binding.
+# File viewer has private keymap with insert/delete bindings disabled so no need
+# to disable the widget. + Fixed the selection color.
+# Report progress in message bar during query.
+#
+# Fixes:
+# Save keyword_highlight setting!
+# Clipboard_cut properly works on any entry widget.
+# Use hopefully faster regexp for code highlighting.
+# Catch errors in source of .cbrowser.
+# More that I've forgotten.
+#
+# Cleanup:
+# Use set_root_base function to keep root widget handling consistent.
+# Renamed set_database to database_prompt.
+# Use write trace on database_file to ensure proper handling.
+# Moved key bindings near corresponding widgets.
+# Use trace on keyword_highlight and code_highlight instead of toggle commands.
+# Cleaned up sloppy Tcl style of string comparisons.
+# Use new unwind_protect function to handler errors in query_execute.
+# Display file now takes list of patterns and lines to highlight and ignores
+# current_results.
+# Moved tag preconfiguring into setup_file_viewer.
+# Moved database building routines into builder.tcl.
+#
+# Revision 0.3  1998/06/21 04:16:24  chris
+# Major code overhaul to eventually allow multiple toplevel windows.
+# Separated querying logic from GUI logic so query routines may be used for
+# other purposes (calltree coming soon!).
+# Improved layout of build dialog (use pack instead of grid).
+# Put groove relief around query_row and made Submit button more coloful.
+# Documented all functions consistently.
+#
+# Revision 0.2  1998/06/18 03:59:06  chris
+# Added option to control keyword highlighting.
+# Made dbase and query history tearoffs only create a single tearoff.
+# Fixed the query_handler so any source line will be acceptable.
+#
+# Revision 0.1  1998/06/16 03:17:28  chris
+# Initial beta release with support for cscope and cs backends.
+#
+
+#  if {$tcl_version >= 8.0} {
+#    package require tk
+#  }
+
+##################################################################
+#
+#  Purpose    : Setup main application window
+#
+#  Parameters : root - the root window path
+#
+#  Results    : NONE
+#
+##################################################################
+
+proc cbrowser_ui {root} {
+
+  set_root_base $root
+
+  setup_menubar $root
+
+  # Create Paned Window frames
+  frame $base.paned_win
+  frame $base.paned_win.upper
+  frame $base.paned_win.lower
+  # Create the paned window
+  Pane_Create $base.paned_win.upper $base.paned_win.lower \
+      -in $base.paned_win -percent 0.30 -minpercent 0.20
+
+  # Create rows within the paned window
+  # upper:
+  frame $base.database_row
+  frame $base.query_row -relief groove -borderwidth 2
+  frame $base.result_row
+  # lower:
+  frame $base.info_row
+  frame $base.file_row
+
+  # Widgets
+
+  # Database info row lists the selected database
+  label $base.database_label -text "Selected Database ("
+  label $base.database_backend_label -textvariable query_backend
+  label $base.database_endparen -text "): "
+  label $base.database -textvariable database_file -relief groove -padx 3
+  bind  $base.database <Button-1> "database_prompt $root"
+
+  global history_button
+  menubutton $base.dbase_recall -image $history_button
+  menu $base.dbase_recall.menu -tearoffcommand "single_tearoff" \
+      -postcommand "dbase_menu_post $base.dbase_recall.menu"
+  $base.dbase_recall configure -menu $base.dbase_recall.menu
+
+  frame $base.activity -background grey80 \
+      -width 10 -height 10 -bd 2 -relief sunken ;# -cursor crosshair
+
+  # The query row contains the submit button, the query field and the recall menu
+  button $base.submit -text "Submit" -background darkgreen -foreground white \
+      -activebackground green -activeforeground black \
+      -command "query_invoke $root"
+
+  # Create the optionmenu for the query type
+  tk_optionMenu $base.query_type query_label ""
+  # The default is to not take focus, why?
+  $base.query_type config -takefocus 1
+
+  # This is where query text is entered.  It should probably have a big neon
+  # sign on it, but it should be fairly obvious.
+  entry $base.query_field -textvariable query_value
+  bind $base.query_field <Key-Up> \
+      "field_history %W %K query_hindex query_hlist"
+  bind $base.query_field <Key-Down> \
+      "field_history %W %K query_hindex query_hlist"
+
+  # Set up the recall menu
+  menubutton $base.query_recall -state disabled -image $history_button \
+      -takefocus 1
+  # -text Recall
+  menu $base.query_recall.menu -tearoffcommand "single_tearoff"
+  $base.query_recall configure -menu $base.query_recall.menu
+
+
+  # The listbox will contain the results of the query.
+  # The automagic scrollbar system is installed for this widget.
+  listbox $base.result_list -exportselection false \
+      -height 6 -width 80 -background white -foreground black
+
+  magic_scroll $base.result_list $base.result_row
+
+  $base.result_list configure -selectmode single
+  bind $base.result_list <Button-1> "
+    query_select_result $root \[%W nearest %y\]
+    focus $base.result_list
+  "
+  bind $base.result_list <space> "
+    query_select_result $root \[%W curselection\]
+    focus $base.result_list
+  "
+
+  # Info row items
+
+#   button .prev -text "Previous" -underline 0 \
+#       -command "query_prev_item $root" -state disabled
+#   button .next -text "Next" -underline 0 \
+#       -command "query_next_item $root" -state disabled
+
+  label $base.file_label -text "File: "
+  entry $base.file_field -state disabled \
+      -textvariable current_file($base.file_viewer)
+  label $base.line_label -text "Line: "
+  entry $base.line_field -state disabled -width 4 \
+      -textvariable current_line($base.file_viewer)
+
+  # Text window row
+  setup_file_viewer $base $base.file_row
+
+  # Message bar
+  message $base.message -textvariable status_msg -relief sunken -aspect 1000
+  bind $base.message <Configure> "%W configure -width %w"
+  # To clear the message, click on it
+  bind $base.message <Button-1> {set_message ""}
+
+  # Geometry management
+
+  # Pack the database row
+  pack $base.database_label \
+       $base.database_backend_label \
+       $base.database_endparen \
+    -in $base.database_row -side left -padx 0
+  pack $base.database -in $base.database_row -side left -padx 3
+  pack $base.dbase_recall -in $base.database_row -side left -padx 5
+  pack $base.activity     -in $base.database_row -side right -padx 5
+
+  # Pack the query_row
+  pack $base.submit       -in $base.query_row -side left -padx 3 -pady 3
+  pack $base.query_type   -in $base.query_row -side left -padx 3
+  pack $base.query_field  -in $base.query_row -side left -fill x -expand yes
+  pack $base.query_recall -in $base.query_row -side right -padx 3
+
+  # Pack the info_row
+  #pack $base.prev $base.next 
+  pack $base.file_label -in $base.info_row -side left
+  pack $base.file_field      -in $base.info_row -side left -fill x -expand yes
+  pack $base.line_label $base.line_field -in $base.info_row -side left
+
+  # Pack the paned window
+  pack $base.result_row -in $base.paned_win.upper	\
+      -side top -fill both -expand yes -pady 4
+
+  pack $base.info_row -in $base.paned_win.lower \
+      -side top -fill x -expand no -pady 4
+  pack $base.file_row -in $base.paned_win.lower \
+      -side bottom -fill both -expand yes -pady 1
+
+  # Pack the main frames for each row in order
+  global tcl_version
+  if {$tcl_version < 8.0} {
+    pack $base.menubar      -in $root -side top -expand no -fill x -padx 2
+  }
+  pack $base.database_row -in $root -side top -expand no -fill x -padx 2 -pady 3
+  pack $base.query_row    -in $root -side top -expand no -fill x -padx 5
+  pack $base.paned_win    -in $root -side top -expand yes -fill both -padx 2
+  pack $base.message      -in $root -side bottom -expand no -fill x -padx 2
+
+  # Global bindings
+  bind $root <Return> "$base.submit flash; query_invoke $root"
+  # Button 2 pastes the selection into the query field
+  bind $root <Button-2> {set_query_selection %W}
+  # Double clicking sets the query and executes
+  bind $root <Double-2> "set_query_selection %W
+                         $base.submit flash
+                         query_invoke $root"
+  bind $root <<Paste>> {set_query_selection %W}
+  bind $root <<Copy>> {clipboard_copy}
+  bind $root <<Cut>> {clipboard_cut}
+  bind $root <<Help>> {help_proc basic}
+
+  # Give the window a default size.
+  wm geometry $root 650x700
+
+  # Make sure Quit is run before closing the main window
+  wm protocol $root WM_DELETE_WINDOW {quit_cbrowser}
+}
+
+##############################################################################
+#
+#  Purpose    : Setup the main menubar for the application
+#
+#  Parameters : root - the root widget path
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc setup_menubar {root} {
+
+  set_root_base $root
+
+  global tcl_version
+  if {$tcl_version < 8.0} {
+    frame $base.menubar -borderwidth 2 -relief raised
+
+    set file_menu $base.file.menu
+    set edit_menu $base.edit.menu
+    set select_menu $base.select.menu
+    set history_menu $base.history.menu
+    set options_menu $base.options.menu
+    set help_menu $base.help.menu
+
+    menubutton $base.file -menu $file_menu \
+        -text "File" -underline 0
+    menubutton $base.edit -menu $edit_menu \
+        -text "Edit" -underline 0
+    menubutton $base.select -menu $select_menu \
+        -text "Select" -underline 0
+    menubutton $base.history -menu $history_menu \
+        -text "History" -underline 0
+    menubutton $base.options -menu $options_menu \
+        -text "Options" -underline 0
+    menubutton $base.help -menu $help_menu \
+        -text "Help" -underline 0
+
+    # Pack it up
+    pack $base.file       -in $base.menubar -side left
+    pack $base.edit       -in $base.menubar -side left
+    pack $base.select     -in $base.menubar -side left
+    pack $base.history    -in $base.menubar -side left
+    pack $base.options    -in $base.menubar -side left
+    pack $base.help       -in $base.menubar -side right
+  } else {
+    set file_menu $base.file
+    set edit_menu $base.edit
+    set select_menu $base.select
+    set history_menu $base.history
+    set options_menu $base.options
+    set help_menu $base.help
+
+    # Use the new menubar property
+    set menu [menu $base.mainmenu]
+    $menu add cascade -label "File" -underline 0 -menu $file_menu
+    $menu add cascade -label "Edit" -underline 0 -menu $edit_menu
+    $menu add cascade -label "Select" -underline 0 -menu $select_menu
+    $menu add cascade -label "History" -underline 0 -menu $history_menu
+    $menu add cascade -label "Options" -underline 0 -menu $options_menu
+    $menu add separator
+    $menu add cascade -label "Help" -underline 0 -menu $help_menu
+    $root configure -menu $menu
+  }
+
+  # Set up the main File menu
+  menu $file_menu \
+      -postcommand "file_menu_filter $file_menu $base.file_viewer"
+  $file_menu add command -label "Choose Database..." \
+      -underline 0 -accel <Meta-c> -command "database_prompt $root"
+  bind $root <Meta-s> "database_prompt $root"
+  $file_menu add command -label "Build Database..." \
+      -underline 0 -accel <Meta-b> -command "build_dialog .build $root"
+  bind $root <Meta-b> "build_dialog .build $root"
+  $file_menu add command -label "Submit Query" \
+      -underline 0 -accel <Enter> -command "query_invoke $root"
+  $file_menu add command -label "Load Query File..." \
+      -underline 0 -accel <Meta-l> -command "query_load_file $root"
+  bind $root <Meta-l> "query_load_file $root"
+  $file_menu add command -label "Save Query File..." \
+      -underline 0 -accel <Meta-s> -command "query_save_file $root"
+  bind $root <Meta-s> "query_save_file $root"
+  $file_menu add command -label "View File..." -underline 0 \
+      -accel <Meta-v> -command "view_file $base.file_viewer"
+  bind $root <Meta-v> "view_file $base.file_viewer"
+  $file_menu add command -label "Edit File..." -underline 0 \
+      -accel <Meta-e> -command "edit_selected $root"
+  bind $root <Meta-e> "edit_selected $root"
+  $file_menu add command -label "CallTree..." -underline 4 \
+      -accel <Meta-t> -command "calltree_dialog $base.calltree"
+  bind $root <Meta-t> "calltree_dialog $base.calltree"
+  $file_menu add separator
+  $file_menu add command -label "Exit" -underline 1 \
+      -command {quit_cbrowser}
+
+  # Set up the Edit menu
+  setup_edit_menu $edit_menu $base.file_viewer
+  set index [$edit_menu index "Paste"]
+  $edit_menu insert [expr $index + 1] \
+      command -label "Clear" -underline 2 -accel <Meta-c> \
+      -command "$base.query_field delete 0 end"
+  bind $root <Meta-c> "$base.query_field delete 0 end"
+
+  # Setup the select menu
+  menu $select_menu
+  set menu [menu .next_menu]
+  $select_menu add cascade -label "Next" -underline 0 -menu $menu
+  $menu add command -label "Item" -underline 0 -command "query_next_item $root"
+  $menu add command -label "File" -underline 0 -command "query_next_file $root"
+  $menu add command -label "Directory" -underline 0 \
+      -command "query_next_directory $root"
+  $menu add command -label "Function" -underline 1 \
+      -command "query_next_function $root"
+  #bind .next <Button-3> "tk_popup $menu %X %Y"
+
+  set menu [menu .prev_menu]
+  $select_menu add cascade -label "Previous" -underline 0 -menu $menu
+  $menu add command -label "Item" -underline 0 -command "query_prev_item $root"
+  $menu add command -label "File" -underline 0 -command "query_prev_file $root"
+  $menu add command -label "Directory" -underline 0 \
+      -command "query_prev_directory $root"
+  $menu add command -label "Function" -underline 1 \
+      -command "query_prev_function $root"
+  #bind .prev <Button-3> "tk_popup $menu %X %Y"
+
+  $select_menu add command -label "First" -underline 0 \
+      -command "query_select_first $root"
+  $select_menu add command -label "Last" -underline 0 \
+      -command "query_select_last $root"
+
+  bind $root <Meta-n> "query_next_item $root"
+  bind $root <Meta-p> "query_prev_item $root"
+
+  # Set up the history menu
+  menu $history_menu
+  $history_menu add command -label "Forget Query" -underline 7 \
+      -command "query_forget $root"
+  $history_menu add command -label "Forget Query Results" -underline 13 \
+      -command "query_forget_results $root"
+  $history_menu add command -label "Forget All Empty Queries" -under 11 \
+      -command "query_forget_empties $root"
+  $history_menu add command -label "Forget All Queries" -underline 7 \
+      -command "query_forget_all $root"
+  $history_menu add command -label "Forget All Query Results" \
+      -underline 8 -command "query_forget_all_results $root"
+
+  # Set up the options menu
+  menu $options_menu
+
+  global code_highlight keyword_highlight
+  $options_menu add check -label "Syntax Highlight" \
+      -variable code_highlight
+  $options_menu add check -label "Highlight Keywords" \
+      -variable keyword_highlight
+  if {!$code_highlight} {
+    $options_menu entryconfigure "Highlight Keywords" -state disabled
+  }
+  trace variable code_highlight w \
+      "toggle_trace $options_menu {Highlight Keywords}"
+
+  global save_queries save_query_results
+  $options_menu add check -label "Save Queries" -variable save_queries
+  $options_menu add check -label "Save Query Results" \
+      -variable save_query_results
+  if {!$save_queries} {
+    $options_menu entryconfigure "Save Query Results" -state disabled
+  }
+  trace variable save_queries w \
+      "toggle_trace $options_menu {Save Query Results}"
+
+  global editor_menu
+  set editor_menu $options_menu.editor
+  $options_menu add cascade -label "Editor" -menu $editor_menu
+  menu $editor_menu
+  global std_editors editor_commands
+  foreach name $std_editors {
+    $editor_menu add radio -label $name -variable editor -value $name
+  }
+  $editor_menu add separator
+  $editor_menu add command -label "Other..." -command {
+    editor_dialog .other_editor
+  }
+
+  $options_menu add separator
+  $options_menu add radio -label "Use cscope" -variable query_backend \
+      -value "cscope"
+  $options_menu add radio -label "Use cs" -variable query_backend \
+      -value "cs"
+  $options_menu add radio -label "Use xz" -variable query_backend \
+      -value "xz"
+
+  $options_menu add separator
+  $options_menu add command -label "Save Options" -command \
+      {save_options; set_message "Saved options..."}
+
+
+  # Set up help
+  setup_help_menu $help_menu
+}
+
+
+##############################################################################
+#
+#  Purpose    : Filter the entries in the file menu before posting.
+#
+#  Parameters : base - the parent widget of the menu to create
+#               viewer - the viewer widget it checks
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc file_menu_filter {menu viewer} {
+  global current_file
+  if {[info exists current_file($viewer)] &&
+      [strlen $current_file($viewer)] > 0} {
+    $menu entryconfigure "View File..." -state normal
+    $menu entryconfigure "Edit File..." -state normal
+  } else {
+    $menu entryconfigure "View File..." -state disabled
+    $menu entryconfigure "Edit File..." -state disabled
+  }
+
+  global query_backend
+  switch -- $query_backend {
+    "xz" {
+      $menu entryconfigure "CallTree..." -state disabled
+    }
+    default {
+      $menu entryconfigure "CallTree..." -state normal
+    }
+  }
+}
+
+##############################################################################
+#
+#  Purpose    : Setup an Edit menu
+#
+#  Parameters : menu - the menu widget to create
+#               viewer - the viewer widget it operates on
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc setup_edit_menu {menu viewer} {
+
+  # Set up the Edit menu
+  menu $menu -postcommand "edit_menu_filter $menu $viewer"
+  set accel [lindex [event info <<Cut>>] 0]; regsub "Key-" $accel "" accel
+  $menu add command -label "Cut" -underline 1 -accel $accel \
+      -command {clipboard_cut}
+  set accel [lindex [event info <<Copy>>] 0]; regsub "Key-" $accel "" accel
+  $menu add command -label "Copy" -underline 0 -accel $accel \
+      -command {clipboard_copy}
+  set accel [lindex [event info <<Paste>>] 0]; regsub "Key-" $accel "" accel
+  $menu add command -label "Paste" -underline 0 -accel $accel \
+      -command "set_query_selection $menu"
+
+  $menu add separator
+  $menu add command -label "Find..." -underline 0 -accel <Control-s> \
+      -command "browser_find_dialog $viewer"
+  $menu add command -label "Goto line..." -underline 0 \
+      -accel <Meta-g> -command "browser_goto $viewer"
+}
+
+##############################################################################
+#
+#  Purpose    : Filter the entries in the edit menu before posting.
+#
+#  Parameters : menu - the menu it was invoked on
+#               viewer - the viewer widget it checks
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc edit_menu_filter {menu viewer} {
+  global current_file
+  if {[info exists current_file($viewer)] &&
+      [strlen $current_file($viewer)] > 0} {
+    $menu entryconfigure "Find..." -state normal
+    $menu entryconfigure "Goto line..." -state normal
+  } else {
+    $menu entryconfigure "Find..." -state disabled
+    $menu entryconfigure "Goto line..." -state disabled
+  }
+
+  set widget [selection own]
+  if {[strlen $widget] > 0} {
+    $menu entryconfigure "Copy" -state normal
+    if {[strcmp [winfo class $widget] "Entry"] == 0} {
+      if {[strcmp [$widget cget -state] "normal"] == 0} {
+        $menu entryconfigure "Cut"  -state normal
+      } else {
+        $menu entryconfigure "Cut"  -state disabled
+      }
+    } else {
+      $menu entryconfigure "Cut"  -state disabled
+    }
+  } else {
+    $menu entryconfigure "Cut"  -state disabled
+    $menu entryconfigure "Copy" -state disabled
+  }
+}
+
+##############################################################################
+#
+#  Purpose    : Setup a help menu
+#
+#  Parameters : menu - the menu to create
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc setup_help_menu {menu} {
+
+  menu $menu
+  $menu add command -label "Basics..." -command {help_proc basic}
+  $menu add command -label "Building..." -command {help_proc building}
+  $menu add command -label "History..." -command {help_proc history}
+  $menu add command -label "Options..." -command {help_proc options}
+  $menu add command -label "CallTree..." -command {help_proc calltree}
+  $menu add separator
+  $menu add command -label "About..." -command {cbrowser_about}
+}
+
+##############################################################################
+#
+#  Purpose    : Setup the query type option menu for the current
+#               backend's query options.
+#
+#  Parameters : widget - the menu widget to setup
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc setup_query_menu {widget} {
+  global query_codes
+
+
+  $widget delete 0 end
+
+  foreach code $query_codes {
+    $widget add radio -label [query_param label $code] \
+        -variable query_label -value [query_param label $code] \
+        -underline [query_param underbar $code] \
+        -command "set query_type $code"
+  }
+}
+
+##############################################################################
+#
+#  Purpose    : Submit a query and put the results in the result list.
+#
+#  Parameters : root - the toplevel widget to act upon
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc query_invoke {root} {
+  global query_value query_type query_label query_status 
+  global database_file build_status
+
+  set_root_base $root
+
+  # If invoked during an active query, abort it
+  if {[strcmp $query_status "none"] != 0} {
+    query_abort
+    return
+  }
+
+  # If this is a datafile read, just do that
+  if {[strcmp $query_type "DataFile"] == 0} {
+    query_read_file $root $query_value
+    return
+  }
+
+  # Only perform if no query or build is taking place
+  if {[info exists build_status] &&
+      [strcmp [lindex $build_status 0] "building"] == 0} {
+    if {[strcmp [lindex $build_status 1] $database_file] == 0} {
+      tk_messageBox -type ok -icon error -title "Error" \
+          "Can't query database until it is completely built."
+      return
+    }
+  }
+
+  # Clean up the query value
+  if {[strcmp $query_type "POSIX"] == 0} {
+    set value "<search>"
+  } else {
+    set value $query_value
+  }
+  if {[llength $value] <= 0} {
+    return
+  }
+
+  # Temporarily turn the Query button into an abort button
+  set submit_config ""
+  foreach attrib {-background -activebackground -text} {
+    lappend submit_config $attrib [$base.submit cget $attrib]
+  }
+  $base.submit configure -text "Abort" \
+      -background darkred -activebackground red
+  # Temporarily bind Cancel and Ctrl-C to abort the query
+  bind $root <Cancel> [list query_abort]
+  bind $root <Control-C> [list query_abort]
+
+  # Put a watch cursor on the main window
+  set cursor [$root cget -cursor]
+  $root configure -cursor watch
+  # Leave the pointer on the query button
+  $base.submit configure -cursor top_left_arrow
+
+  # Clear the results in the result list
+  query_clear $root
+
+  set_message "Searching for \"$query_label: $value\"..."
+
+  # Start the query activity indicator
+  activity_start 500 $base.activity
+
+  global current_results current_query current_type queries
+
+  # Call query_execute, but make sure to handle any errors and reraise later.
+  unwind_protect {query_execute $query_type $value} {
+
+        # Reset the abort button
+        eval $base.submit configure $submit_config
+        # Reset the bindings
+        bind $root <Cancel> ""
+        bind $root <Control-C> ""
+
+        # Reset the normal cursor
+        $root configure -cursor $cursor
+
+        # Clear the searching message
+        set_message ""
+
+        activity_finish 500 $base.activity
+      } results
+
+  set current_results $results
+  set current_query   $value
+  set current_type    $query_type
+
+  query_result_list $root $results
+
+  # Move the query to the top of the recall menu.
+  if {[info exists queries($query_type:$value)]} {
+    $base.query_recall.menu delete "$query_label: $value"
+  }
+  $base.query_recall.menu insert 0 command -label "$query_label: $value" \
+    -command "query_recall $root $query_type {$value}"
+
+  # Save the query results
+  set queries($query_type:$value) $current_results
+
+  field_history_add query_hlist query_hindex $value
+
+  if {[strcmp $query_type "CalledBy"] == 0} {
+    # Set the called_by list.  This is mainly for the function call highlighting,
+    # but it also serves to accelerate the function call tree if that's in use.
+    set_callees $value $current_results
+  }
+
+  set_message \
+      "Found [llength $results] matches for \"$query_label: $value\""
+}
+
+##############################################################################
+#
+#  Purpose    : Setup the query result listbox with the given query results.
+#
+#  Parameters : root - the root window containing the result_list and other
+#                      UI elements
+#               results - list of query results
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc query_result_list {root results} {
+
+  set_root_base $root
+
+  set listbox $base.result_list
+
+  foreach line $results {
+    foreach {fullpath function linenum rest} $line {
+      add_line_to_listbox $listbox $fullpath $function $linenum $rest
+    }
+  }
+
+  # Select the first item in the list
+  $listbox selection set 0
+  query_select_result $root 0
+
+  # Enable the prev and next buttons and the recall menu
+#   if {[llength $results] > 0} {
+#     $base.prev configure -state normal
+#     $base.next configure -state normal
+#   }
+  $base.query_recall configure -state normal  
+}
+
+##############################################################################
+#
+#  Purpose    : Setup lists of called functions and line numbers where called
+#               from the given 'CalledBy' query results.
+#
+#  Parameters : funcname - the function name of the CalledBy query
+#               results - query result list from CalledBy query
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc set_callees {funcname results} {
+  global c_keywords c_typenames query_backend
+
+  upvar \#0 called_by($funcname) callees
+
+  set callees ""
+
+  foreach line $results {
+    set file [lindex $line 0]
+    set linenum [lindex $line 2]
+    set code [lindex $line end]
+    set func ""
+
+    if {[strcmp $query_backend "cscope"] == 0} {
+      # Cscope is smart enough to report the called function
+      set func [lindex $line 1]
+    } else {
+      while {[regexp -indices -- \
+                  "(\[a-zA-Z_\]+)\[ \t\]*\\(" $code match first]} {
+
+        set func [string range $code [lindex $first 0] [lindex $first 1]]
+
+        # If the found function is a keyword or typename, keep trying.
+        if {[lsearch $c_keywords $func] >= 0 || 
+            [lsearch $c_typenames $func] >= 0} {
+
+          # Discard the beginning of the string and continue searching
+          set code [string range $code [lindex $match 1] end]
+          set func ""
+          continue
+        }
+
+        # Check if this called function is already in the list.
+        set index [lsearch $callees $func]
+        if {$index >= 0 &&
+            [lindex $callees [expr $index + 1]] == $linenum} {
+          
+          set func ""
+          # Discard the beginning of the string and continue searching
+          set code [string range $code [lindex $match 1] end]
+        } else {
+          # This is the called function, we're done
+          break
+        }
+      }
+    }
+
+    # Add the function to the list if it isn't blank.
+    if {[strlen $func] > 0} {
+      lappend callees $func $linenum
+    }
+  }
+}
+
+##############################################################################
+#
+#  Purpose    : Add the given data to the result listbox in a readable format.
+#
+#  Parameters : listbox - widget to add line to
+#               fullpath - the full pathname of the result file
+#               function - the function name
+#               linenum - the line number where found
+#               codeline - the line of code
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc add_line_to_listbox {listbox fullpath function linenum codeline} {
+  global current_type query_backend
+
+  set sourcefile [file tail $fullpath]
+
+  if {[strlen $function] == 0} {
+    set scope ""
+  } elseif {[strcmp $current_type "CalledBy"] == 0 &&
+            [strcmp $query_backend "cscope"] == 0} {
+    set scope "calls ${function}, "
+  } else {
+    set scope "in ${function}, "
+  }
+
+  # Add the listbox entry - make it a little more readable
+  $listbox insert end \
+      "\"$sourcefile\" ${scope}at line $linenum: $codeline"
+}
+
+
+##############################################################################
+#
+#  Purpose    : Perform a query of the given query type for the given value.
+#
+#  Parameters : query_type - the type of query to perform
+#               value - the value to query for
+#
+#  Result     : A list of query results.  Each item in the list is of the
+#               form:
+#                  {FILEPATH FUNCTION LINENUM {CODE LINE}}
+#
+##############################################################################
+
+set query_status "none"
+
+proc query_execute {query_type value} {
+  global database_file query_backend query_codes
+  global query_status query_results query_result_count tmpdir
+
+  # This is not a great idea since the calltree might be used during a long
+  # query.  Maybe there should be separate pipes.
+  if {[strcmp $query_status "none"] != 0} {
+    error "A query is already in progress."
+  }
+
+  # Make sure the value has no leading or trailing spaces
+  set value [string trim $value]
+
+  set cmd [query_param command $query_type]
+
+  set query_results ""
+  set query_result_count 0
+
+  if {![file exists $database_file]} {
+    tk_messageBox -type ok -icon error -title "No Database" \
+        -message "Selected database does not exist."
+    return
+  }
+
+  global query_pipe
+  # If a query_pipe is not open, open it
+  if ![info exists query_pipe] {
+    set query_pipe [query_open $database_file]
+  }
+
+  set query_status "active"
+
+  # Write the query cmd followed by the value
+  if [catch {puts $query_pipe ${cmd}${value}}] {
+    catch {close $query_pipe}
+    unset query_pipe
+    set query_status "none"
+    error "query channel is not accepting input"
+  }
+
+  update idletasks
+
+  # Process file and user events until done or user presses Abort
+  tkwait variable query_status
+
+  # Check if the query was aborted or failed
+  if {[strcmp $query_status "done"] == 0} {
+
+    set query_status "none"
+
+    # Cancel handler
+    #fileevent $query_pipe readable ""
+  } elseif {[strcmp $query_status "abort"] == 0 ||
+            [file size "$tmpdir/cbrowser_[pid]"] > 0} {
+
+    # The process must be killed, or the file close will hang
+    eval exec kill [pid $query_pipe]
+
+    # Close the pipe and forget it
+    catch {close $query_pipe}
+    unset query_pipe
+
+    # Clear the results
+    set results ""
+
+    set query_status none
+
+    if {[file size "$tmpdir/cbrowser_[pid]"] > 0} {
+      if [catch {exec cat "$tmpdir/cbrowser_[pid]"} errmsg] {
+        error "Ack!"
+      } else {
+        error $errmsg
+      }
+    }
+  } else {
+    error "Internal error: unexpected query_status = $query_status"
+  }
+
+  return $query_results
+}
+
+##############################################################################
+#
+#  Purpose    : Abort the currently active query.
+#
+#  Parameters : NONE
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc query_abort {} {
+  global query_status
+
+  set query_status "abort"
+}
+
+##############################################################################
+#
+#  Purpose    : Handle all input from the active query.  Store the results in
+#               the list variable "query_results".
+#
+#  Parameters : NONE
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc query_handler {} {
+  global query_results query_status query_pipe query_result_count
+
+  # Loop until input is exhausted.  It should probably check
+  # if ![fblocked $query_pipe], but that doesn't seem to work.
+  while 1 {
+    if [eof $query_pipe] {
+      catch {close $query_pipe}
+      unset query_pipe
+      set query_status "done"
+      return
+    }
+
+    set prompt [query_param prompt]
+
+    # Get first characters in case it's a new prompt
+    set prefix [read $query_pipe [strlen $prompt]]
+
+    if {$prefix == -1} {
+      return
+    }
+
+    if {[strcmp $prefix $prompt] == 0} {
+      set query_status "done"
+      return
+    }
+
+    if {[gets $query_pipe line] < 0} {
+      return
+    }
+    set line ${prefix}${line}
+
+    # Parse the input line.  Note possible continue...
+    lappend query_results [query_line $line]
+ 
+    incr query_result_count
+    #set_message "Got $query_result_count matches... searching"
+  }
+}
+
+##############################################################################
+#
+#  Purpose    : Split a result line from a query into list format.
+#               If the input line does not contain query results in the
+#               correct format, force the caller to continue.
+#
+#  Parameters : line - raw query result line
+#
+#  Result     : list containing the file, function, line number and the code
+#               of the line in a proper Tcl list
+#
+##############################################################################
+
+proc query_line {line} {
+  # Discard the cscope result count line
+  if {[regexp -- "^cscope:" $line]} {
+    return -code continue
+  }
+
+  global query_backend
+  if {[strcmp $query_backend "xz"] == 0} {
+    if {[llength $line] >= 5} {
+      # Split the list into variables
+      if {[llength $line] > 5} {
+        foreach {match fullpath function linenum tokentype tokenclass} $line {}
+      } else {
+        foreach {match fullpath linenum tokentype tokenclass} $line {}
+        set function ""
+      }
+
+      set rest [list $tokentype $tokenclass]
+      return [list $fullpath $function $linenum $rest]
+    } else {
+      return -code continue
+    }
+  } else {
+    # Grab the first 3 entries.  Since the line read may contain brackets,
+    # we need to explicitly split it.
+    set data [lrange [split $line] 0 2]
+
+    # Make a list if there was actually 3 entries
+    if {[llength $data] == 3} {
+      # Split the list into variables
+      foreach {fullpath function linenum} $data {}
+      # Set the rest to everything after the first three elements
+      set rest [string range $line [expr [strlen $data]+1] end]
+
+      return [list $fullpath $function $linenum $rest]
+    } else {
+      # Process next line of callers read loop
+      return -code continue
+    }
+  }
+}
+
+##############################################################################
+#
+#  Purpose    : Select a file of query results to be loaded.
+#
+#  Parameters : root - the root window of the file dialog
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc query_load_file {root} {
+
+  set_root_base $root
+
+  set filetypes {
+    {"All files" {*}}
+  }
+
+  set path [pwd]
+
+  set result [tk_getOpenFile -parent $root -filetypes $filetypes \
+                  -title "Load Data File" \
+                  -initialdir $path]
+
+  if {[strlen $result] > 0} {
+    query_read_file $root $result
+
+    global query_value query_type
+    set query_type      "DataFile"
+    set query_label     "Data File"
+    set query_value     $result
+  }
+}
+
+##############################################################################
+#
+#  Purpose    : Read a file containing query data, store it in the result
+#               list and add a history element for it.
+#
+#  Parameters : root - the root window containing the result list and other 
+#                      UI elements
+#               file - the input file
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc query_read_file {root file} {
+  global current_results current_query current_type queries query_type
+
+  set_root_base $root
+
+  query_clear $root
+
+  set infile [open $file "r"]
+  if {[strcmp $infile ""] == 0} {
+    error "Can't open $file"
+  }
+
+  set results ""
+  while {![eof $infile] &&
+         [gets $infile line]} {
+    lappend results [query_line $line]
+  }
+  close $infile
+
+  set current_results $results
+  set current_query   $file
+  set current_type    "DataFile"
+
+  query_result_list $root $results
+
+  set label "DataFile: [file tail $file]"
+
+  # Move the query to the top of the recall menu.
+  if {[info exists queries($current_type:$file)]} {
+    $base.query_recall.menu delete $label
+  }
+  $base.query_recall.menu insert 0 command -label $label \
+    -command "query_recall $root $current_type $file"
+
+  # Save the query results
+  set queries(DataFile:$file) $current_results  
+}
+
+##############################################################################
+#
+#  Purpose    : Prompt for a filename and save the current query results. 
+#
+#  Parameters : parent - the parent of the file dialog
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc query_save_file {parent} {
+  global current_results current_query
+
+  if {[llength $current_results] <= 0} {
+    tk_messageBox -type ok -icon info -title "No Query Results" \
+        -message "There are no query results to save at this time."
+    return
+  }
+
+  set filetypes {
+    {"All files" {*}}
+  }
+
+  set path [pwd]
+
+  set filename [tk_getSaveFile -parent $parent -filetypes $filetypes \
+                  -title "Save Data File" \
+                  -initialdir $path -initialfile $current_query]
+
+  if {[strlen $filename] > 0} {
+    query_write_file $filename
+  }
+}
+
+##############################################################################
+#
+#  Purpose    : Save the current query results to the given file.
+#
+#  Parameters : filename - the file to save the results to
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc query_write_file {filename} {
+  global current_results
+
+  set outfile [open $filename "w"]
+  if {[strlen $outfile] <= 0} {
+    error "Can't open $outfile"
+  }
+
+  foreach list $current_results {
+    puts $outfile [concat [lrange $list 0 2] [lindex $list 3]]
+  }
+  close $outfile
+}
+
+##############################################################################
+#
+#  Purpose    : Open a pipe to the query backend program.
+#
+#  Parameters : dbase_file - the file to open with the backend program
+#
+#  Result     : the file id of the opened pipe
+#
+##############################################################################
+proc query_open {dbase_file} {
+  global query_backend tmpdir
+
+  # Change to the directory of the database.  This is mostly for compatibility
+  # with cs which currently fails if the query is performed from outside the
+  # directory where it was built.
+  set pwd [pwd]
+  cd [file dirname $dbase_file]
+
+  # Start backend program to perform the query and open a pipe to receive the
+  # results.
+  catch {file delete "$tmpdir/cbrowser_[pid]"}
+  if {[strcmp $query_backend "xz"] == 0} {
+    set cmdline "|$query_backend -i -s -f $dbase_file 2> $tmpdir/cbrowser_[pid]"
+  } else {
+    set cmdline "|$query_backend -d -l -f $dbase_file 2> $tmpdir/cbrowser_[pid]"
+  }
+  if [catch {open $cmdline "r+"} f] {
+    global errorInfo errorCode
+    error "Unable to execute query_backend: $f" $errorInfo $errorCode
+  }
+  set prompt [query_param prompt]
+  while 1 {
+    # Read the initial prompt
+    set prefix [read $f [strlen $prompt]]
+    if {[strcmp $prefix $prompt] == 0} { break }
+    gets $f
+  }
+             
+
+  # Don't let the pipe plug up the works
+  fconfigure $f -blocking 0 -buffering none
+
+  # Register the handler for the input pipe
+  fileevent $f readable [list query_handler]
+
+  cd $pwd
+  return $f
+}
+
+##############################################################################
+#
+#  Purpose    : Clear the query results listbox, the file viewer, and the
+#               global current_results variables.  Disable the next and prev
+#               buttons.
+#
+#  Parameters : root - the root of the window to operate on
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc query_clear {root} {
+
+  global current_results
+  set current_results ""
+
+  set_root_base $root
+
+  display_clear $root
+
+  # Clear the listbox
+  $base.result_list delete 0 end
+
+  # If we're doing magic scrollbars, unmap them
+  global magic_scroll
+  if {$magic_scroll} {
+    # Unpack the scrollbars if they are packed
+    unmap $base.result_list_xscroll
+    unmap $base.result_list_yscroll
+  }
+
+  # Disable the next/prev buttons
+  #$base.prev configure -state disabled
+  #$base.next configure -state disabled
+}
+
+##############################################################################
+#
+#  Purpose    : Recall a query and store the results in the listbox.
+#               Enable the next and prev buttons.
+#
+#  Parameters : root - the root widget path
+#               type - the query type to recall
+#               value - the query value to recall
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc query_recall {root type value} {
+  global query_value query_type query_label queries 
+  global current_results current_query current_type
+
+  set_root_base $root
+
+  # Reset the history index mechanism
+  global query_hindex
+  if [info exists query_hindex] {unset query_hindex}
+
+  set listbox $base.result_list
+
+  set query_value $value
+  set current_results $queries($type:$value)
+  set current_query $value
+  set current_type $type
+  set query_type $type
+  set query_label [query_param label $type]
+
+  $listbox delete 0 end
+  foreach line $queries($type:$value) {
+    # Quick way to convert the line to arguments
+    eval add_line_to_listbox $listbox $line
+  }
+
+  set num_results [llength $current_results]
+  if {$num_results > 0} {
+    $listbox selection set 0
+    query_select_result $root 0
+
+#    $base.prev configure -state normal
+#    $base.next configure -state normal
+
+    set_message \
+        "Recalled $num_results matches for \"$query_label: $value\"."
+  } else {
+    set_message "Recalled \"$query_label: $value\"."
+  }
+}
+
+##############################################################################
+#
+#  Purpose    : Forget a query and it's results.
+#
+#  Parameters : root - the root widget path
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc query_forget {root} {
+  global queries current_query current_type
+
+  set_root_base $root
+
+  if {[strcmp $current_type "DataFile"] == 0} {
+    set label "[query_param label $current_type]: [file tail $current_query]"
+  } else {
+    set label "[query_param label $current_type]: $current_query"
+  }
+
+  if {[tk_messageBox -type yesno -default yes \
+      -message "Forget query and results for \"$label\" ?" \
+      -icon question -title Question]} {
+
+    unset queries($current_type:$current_query)
+
+    $base.query_recall.menu delete $label
+
+    if {[$base.query_recall.menu index end] <= 0} {
+      $base.query_recall configure -state disabled
+    }
+
+    query_clear $root
+
+    set_message "Discarded query and results for \"$current_type: $current_query\""
+  }
+}
+
+##############################################################################
+#
+#  Purpose    : Forget just the results of a query.
+#
+#  Parameters : root - the root widget path
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc query_forget_results {root} {
+  global queries current_query current_type
+
+  set_root_base $root
+
+  if {[strcmp $current_type "DataFile"] == 0} {
+    set label "[query_param label $current_type]: [file tail $current_query]"
+  } else {
+    set label "[query_param label $current_type]: $current_query"
+  }
+
+  if {[tk_messageBox -type yesno -default yes \
+      -message "Forget results for \"$label\" ?" \
+      -icon question -title Question]} {
+
+    set queries($current_type:$current_query) {}
+
+    query_clear $root
+
+    set_message "Discarded results for \"$current_type: $current_query\""
+  }
+}
+
+##############################################################################
+#
+#  Purpose    : Forget all queries that didn't return results.
+#
+#  Parameters : root - the root widget path
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc query_forget_empties {root} {
+  global queries current_query current_type
+
+  set_root_base $root
+
+  if {[tk_messageBox -type yesno -default yes \
+      -message "Forget all queries with no results ?" \
+      -icon question -title Question]} {
+
+    foreach index [array names queries] {
+      if {[llength $queries($index)] == 0} {
+        set list [split $index ":"]
+        set label [query_param label [lindex $list 0]]
+        set menuname [join [list $label [lindex $list 1]] ": "]
+        $base.query_recall.menu delete $menuname
+        unset queries($index)
+      }
+    }
+
+    set_message "Discarded all queries with no results"
+  }
+}
+
+##############################################################################
+#
+#  Purpose    : Forget all queries and results.
+#
+#  Parameters : root - the root widget path
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc query_forget_all {root} {
+  global queries current_query current_type
+
+  set_root_base $root
+
+  if {[tk_messageBox -type yesno -default yes \
+      -message "Forget all queries and results ?" \
+      -icon question -title Question]} {
+
+    unset queries
+    $base.query_recall.menu delete 0 end
+    $base.query_recall configure -state disabled
+
+    query_clear $root
+
+    set_message "Discarded all queries and results"
+  }
+}
+
+##############################################################################
+#
+#  Purpose    : Forget all query results.
+#
+#  Parameters : root - the root widget path
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc query_forget_all_results {root} {
+  global queries current_query current_type
+
+  set_root_base $root
+
+  if {[tk_messageBox -type yesno -default yes \
+      -message "Forget all query results ?" \
+      -icon question -title Question]} {
+
+    foreach index [array names queries] {
+      set queries($index) {}
+    }
+
+    query_clear $root
+
+    set_message "Discarded all query results"
+  }
+}
+
+##############################################################################
+#
+#  Purpose    : Move to the next item in the result listbox.
+#
+#  Parameters : root - the root widget path
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc query_next_item {root} {
+
+  set_root_base $root
+
+  set listbox $base.result_list
+
+  set current [$listbox curselection]
+  set end [$listbox index end]
+  set next [expr $current + 1]
+  if {$next < $end} {
+    $listbox selection clear $current
+    $listbox selection set $next
+    $listbox activate $next
+    $listbox see $next
+    query_select_result $root $next
+  }
+}
+
+##############################################################################
+#
+#  Purpose    : Move to the previous item in the result listbox.
+#
+#  Parameters : root - the root widget path
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc query_prev_item {root} {
+
+  set_root_base $root
+
+  set listbox $base.result_list
+
+  set current [$listbox curselection]
+  set prev [expr $current - 1]
+  if {$prev >= 0} {
+    $listbox selection clear $current
+    $listbox selection set $prev
+    $listbox activate $prev
+    $listbox see $prev
+    query_select_result $root $prev
+  }
+}
+
+##############################################################################
+#
+#  Purpose    : Move to the next file item in the result listbox.
+#
+#  Parameters : root - the root widget path
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc query_next_file {root} {
+  global current_results
+
+  set_root_base $root
+
+  set listbox $base.result_list
+
+  set current [$listbox curselection]
+  set curfile [lindex [lindex $current_results $current] 0]
+
+  set end [llength $current_results]
+  set next $current
+  while {$next < $end} {
+    if {[strcmp [lindex [lindex $current_results $next] 0] \
+             $curfile] != 0} {
+      break
+    }
+    incr next
+  } 
+
+  if {$next >= $end} {
+    set next [expr $end - 1]
+  }
+
+  $listbox selection clear $current
+  $listbox selection set $next
+  $listbox activate $next
+  $listbox see $next
+  query_select_result $root $next
+}
+
+##############################################################################
+#
+#  Purpose    : Move to the previous file item in the result listbox.
+#
+#  Parameters : root - the root widget path
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc query_prev_file {root} {
+  global current_results
+
+  set_root_base $root
+
+  set listbox $base.result_list
+
+  set current [$listbox curselection]
+  set curfile [lindex [lindex $current_results $current] 0]
+
+  set prev $current
+  while {$prev >= 0} {
+    if {[strcmp [lindex [lindex $current_results $prev] 0] \
+             $curfile] != 0} {
+      break
+    }
+    incr prev -1
+  } 
+
+  if {$prev < 0} {
+    set prev 0
+  }
+
+  $listbox selection clear $current
+  $listbox selection set $prev
+  $listbox activate $prev
+  $listbox see $prev
+  query_select_result $root $prev
+}
+
+
+##############################################################################
+#
+#  Purpose    : Move to the next directory item in the result listbox.
+#
+#  Parameters : root - the root widget path
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc query_next_directory {root} {
+  global current_results
+
+  set_root_base $root
+
+  set listbox $base.result_list
+
+  set current [$listbox curselection]
+  set curdirectory [file dirname \
+                        [lindex [lindex $current_results $current] 0]]
+
+  set end [llength $current_results]
+  set next $current
+  while {$next < $end} {
+    if {[strcmp [file dirname [lindex [lindex $current_results $next] 0]] \
+             $curdirectory] != 0} {
+      break
+    }
+    incr next
+  } 
+
+  if {$next >= $end} {
+    set next [expr $end - 1]
+  }
+
+  $listbox selection clear $current
+  $listbox selection set $next
+  $listbox activate $next
+  $listbox see $next
+  query_select_result $root $next
+}
+
+##############################################################################
+#
+#  Purpose    : Move to the previous directory item in the result listbox.
+#
+#  Parameters : root - the root widget path
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc query_prev_directory {root} {
+  global current_results
+
+  set_root_base $root
+
+  set listbox $base.result_list
+
+  set current [$listbox curselection]
+  set curdirectory [file dirname \
+                        [lindex [lindex $current_results $current] 0]]
+
+  set prev $current
+  while {$prev >= 0} {
+    if {[strcmp [file dirname [lindex [lindex $current_results $prev] 0]] \
+             $curdirectory] != 0} {
+      break
+    }
+    incr prev -1
+  } 
+
+  if {$prev < 0} {
+    set prev 0
+  }
+
+  $listbox selection clear $current
+  $listbox selection set $prev
+  $listbox activate $prev
+  $listbox see $prev
+  query_select_result $root $prev
+}
+##############################################################################
+#
+#  Purpose    : Move to the next function item in the result listbox.
+#
+#  Parameters : root - the root widget path
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc query_next_function {root} {
+  global current_results
+
+  set_root_base $root
+
+  set listbox $base.result_list
+
+  set current [$listbox curselection]
+  set curfunction [lindex [lindex $current_results $current] 1]
+
+  set end [llength $current_results]
+  set next $current
+  while {$next < $end} {
+    if {[strcmp [lindex [lindex $current_results $next] 1] \
+             $curfunction] != 0} {
+      break
+    }
+    incr next
+  } 
+
+  if {$next >= $end} {
+    set next [expr $end - 1]
+  }
+
+  $listbox selection clear $current
+  $listbox selection set $next
+  $listbox activate $next
+  $listbox see $next
+  query_select_result $root $next
+}
+
+##############################################################################
+#
+#  Purpose    : Move to the previous function item in the result listbox.
+#
+#  Parameters : root - the root widget path
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc query_prev_function {root} {
+  global current_results
+
+  set_root_base $root
+
+  set listbox $base.result_list
+
+  set current [$listbox curselection]
+  set curfunction [lindex [lindex $current_results $current] 1]
+
+  set prev $current
+  while {$prev >= 0} {
+    if {[strcmp [lindex [lindex $current_results $prev] 1] \
+             $curfunction] != 0} {
+      break
+    }
+    incr prev -1
+  } 
+
+  if {$prev < 0} {
+    set prev 0
+  }
+
+  $listbox selection clear $current
+  $listbox selection set $prev
+  $listbox activate $prev
+  $listbox see $prev
+  query_select_result $root $prev
+}
+
+##############################################################################
+#
+#  Purpose    : Move to the first item in the result listbox.
+#
+#  Parameters : root - the root widget path
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc query_select_first {root} {
+  global current_results
+
+  set_root_base $root
+
+  set listbox $base.result_list
+
+  set current [$listbox curselection]
+
+  $listbox selection clear $current
+  $listbox selection set 0
+  $listbox activate 0
+  $listbox see 0
+  query_select_result $root 0
+}
+
+##############################################################################
+#
+#  Purpose    : Move to the last item in the result listbox.
+#
+#  Parameters : root - the root widget path
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc query_select_last {root} {
+  global current_results
+
+  set_root_base $root
+
+  set listbox $base.result_list
+
+  set current [$listbox curselection]
+
+  $listbox selection clear $current
+  $listbox selection set end
+  $listbox activate end
+  $listbox see end
+  query_select_result $root end
+}
+
+##############################################################################
+#
+#  Purpose    : Select a query result.
+#
+#  Parameters : root - the root widget path
+#               index - the index into the result list
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc query_select_result {root index} {
+  global queries current_results current_query current_type
+
+  set_root_base $root
+
+  if {[strlen $index] > 0 && [strlen $current_results] > 0} {
+
+    set line [lindex $current_results $index]
+
+    set file [lindex $line 0]
+    set function [lindex $line 1]
+    set linenum [lindex $line 2]
+
+    # Construct the highlight list
+    set highlights ""
+
+    global called_by
+    if {[strcmp $current_type "CalledBy"] == 0 &&
+        [info exists called_by($current_query)]} {
+
+      set highlights $called_by($current_query)
+    } else {
+      foreach result $current_results {
+        if {[strcmp [lindex $result 0] $file] == 0} {
+          set line [lindex $result 2]
+          lappend highlights $current_query $line
+        }
+      }
+    }
+
+    display_file $root $file $linenum $highlights
+  } else {
+    # Remove any tagged matches
+    $base.file_viewer tag remove matched_text 1.0 end
+
+    $base.file_viewer delete 1.0 end
+  }
+}
+
+##############################################################################
+#
+#  Purpose    : Display the given file in the given text widget.  Put an arrow
+#               glyph at the line number, and highlight the code if requested.
+#               Underline the strings matching the patterns in the underlines
+#               list.  If the file is already being displayed, simply set the
+#               line number mark.
+#
+#  Parameters : root - the toplevel widget of the file_viewer
+#               file - the path of the file
+#               linenum - the line number to mark and display
+#               underlines - list of patterns and lines to underline
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc display_file {root file linenum {underlines {}}} {
+  global current_file current_line text_mark
+
+  set_root_base $root
+
+  set window $base.file_viewer
+
+  if ![info exists current_file($window)] {
+    set current_file($window) ""
+  }
+  if ![info exists current_line($window)] {
+    set current_line($window) ""
+  }
+
+  set mark_point $window.text_mark
+
+  if ![file exists $file] {
+    global database_file
+    # Try the file in the directory of the database
+    set dbase_dir [file dirname $database_file]
+    set new_file [file join $dbase_dir $file]
+    if [file exists $new_file] {
+      set file $new_file
+    } else {
+      tk_messageBox -type ok -icon error -title "File Not Found" \
+          -message "$file not found"
+      display_clear $root
+      return
+    }
+  }
+
+  if {[strcmp $file $current_file($window)] != 0} {
+    #set f [open "|expand $file" "r"]
+    set f [open $file "r"]
+
+    # Enable the text widget and clear it
+    $window configure -state normal
+    $window delete 1.0 end
+
+    # If we're doing magic scrollbars, unmap them
+    global magic_scroll
+    if {$magic_scroll} {
+      # Unmap the scrollbars if they are mapped
+      unmap $base.file_viewer_xscroll
+      unmap $base.file_viewer_yscroll
+    }
+
+    while {[gets $f line] >= 0} {
+      $window insert end "\t$line\n"
+    }
+    close $f
+
+    set current_file($window) $file
+    set new_file 1
+  } else {
+    if {[strlen $current_line($window)] != 0} {
+      # Destroy the existing image
+      if {[winfo exists $mark_point]} {
+        $window delete $mark_point
+      }
+    }
+
+    set new_file 0
+  }
+
+  set current_line($window) $linenum
+
+  if {$linenum > 0} {
+
+    # Mark the line with the arrow image
+    if ![winfo exists $mark_point] {
+      label $mark_point -image $text_mark -background black -borderwidth 0 \
+          -padx 0 -pady 0
+    }
+    $window window create $linenum.0 -window $mark_point
+    # Tk 8.0
+    #$window image create $linenum.0 -image $text_mark
+
+    # Ensure that the line is visible, and move the insertion point there.
+    $window see $linenum.0
+    $window mark set insert $linenum.0
+  }
+
+  # Update the display before the time-consuming highlighting
+  update idletasks
+
+  if {$new_file} {
+    # Do the highlights if needed.
+    c_highlights $window
+
+    # Remove the finder dialog since the text is now different
+    if [winfo exists $base.file_viewer.finder] {
+      wm withdraw $base.file_viewer.finder
+    }
+  }
+
+#   global last_underlines
+#   if {$new_file ||
+#       ![info exists last_underlines($window)] ||
+#       [strcmp $last_underlines($window) $underlines] != 0} {
+
+    # Remove any tagged matches
+    $window tag remove matched_text 1.0 end
+
+    # Find the pattern in all listed lines and underline it
+    foreach {pattern line} $underlines {
+      highlight_word $pattern matched_text $window $line.0 "$line.0 lineend"
+    }
+
+#     set last_underlines($window) $underlines
+#   }
+}
+
+##############################################################################
+#
+#  Purpose    : Display the file in a separate viewer
+#
+#  Parameters : root - the root of the window to operate on
+#               file - the file to view
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc view_file {root} {
+  global viewer_count
+  if [info exists viewer_count] {
+    incr viewer_count
+  } else {
+    set viewer_count 1
+  }
+
+  global current_file current_line
+
+  set top [toplevel $root.viewer\#$viewer_count]
+  wm title $top "cbrowser: $current_file($root)"
+
+  # Create the info row
+  frame $top.info_row
+  label $top.file_label -text "File: "
+  entry $top.file_field -state disabled \
+      -textvariable current_file($top.file_viewer)
+  label $top.line_label -text "Line: "
+  entry $top.line_field -state disabled -width 4 \
+      -textvariable current_line($top.file_viewer)
+
+  # Pack the info_row
+  pack $top.file_label -in $top.info_row -side left
+  pack $top.file_field -in $top.info_row -side left -fill x -expand yes
+  pack $top.line_label $top.line_field -in $top.info_row -side left
+
+  pack $top.info_row -fill x -pady 4
+
+  frame $top.viewer
+  setup_file_viewer $top $top.viewer
+  $top.file_viewer configure -width 80 -height 30
+  pack $top.viewer -fill both -expand yes
+
+  display_file $top $current_file($root) $current_line($root)
+}
+
+##############################################################################
+#
+#  Purpose    : Paste the PRIMARY or CLIPBOARD selection into the query field,
+#               replacing any existing contents.
+#
+#  Parameters : widget - the widget the binding was invoked on
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc set_query_selection {widget} {
+  # Only do this if there is a selection, and the widget entered is not the
+  # query_field widget.  This allows you to still explicitly paste into the
+  # query_field without overwriting it.
+  if {[string match *.query_field $widget]} {return}
+
+  if {![catch {selection get} selection] ||
+      ![catch {selection get -selection CLIPBOARD} selection]} {
+
+    .query_field delete 0 end
+    .query_field insert 0 [string trim $selection]
+  }
+}
+
+##############################################################################
+#
+#  Purpose    : Select a database for querying or building.
+#
+#  Parameters : parent - the parent window of the file dialog
+#               create - boolean indicating whether the selection is for
+#                        creation
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc select_database {parent {create 0}} {
+  global database_file query_backend
+
+  if {[strcmp $query_backend "xz"] == 0} {
+    set filetypes {
+      {"XZ Database" {".dat"}}
+      {"Cscope or cs Database" {".out"}}
+      {"All files" {*}}
+    }
+  } else {
+    set filetypes {
+      {"Cscope or cs Database" {".out"}}
+      {"XZ Database" {".dat"}}
+      {"All files" {*}}
+    }
+  }
+
+  set path [file dirname $database_file]
+  if {[strcmp $path "."] == 0} {
+    set path [pwd]
+  }
+  set file [file tail    $database_file]
+  if {$create} {
+    set result [tk_getSaveFile -parent $parent -filetypes $filetypes \
+                    -title "Select Database" \
+                    -initialfile $file -initialdir $path]
+  } else {
+    set result [tk_getOpenFile -parent $parent -filetypes $filetypes \
+                    -title "Select Database" \
+                    -initialfile $file -initialdir $path]
+  }
+  if {[strlen $result] > 0} {
+    set result [file nativename $result]
+    # Add this dbase to the recall list
+    dbase_history $result
+  }
+
+  return $result
+}
+
+##############################################################################
+#
+#  Purpose    : Prompt for a database file and set it if not canceled.
+#
+#  Parameters : root - the root window of the calling dialog
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc database_prompt {root} {
+  global database_file query_backend
+  set temp [select_database $root]
+  if {[strlen $temp] > 0} {set database_file $temp}
+
+  set query_backend [database_backend $database_file]
+}
+
+##############################################################################
+#
+#  Purpose    : Guess the backend for the given database file name
+#
+#  Parameters : filename - the filename of the database
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc database_backend {filename} {
+  global query_backend
+
+  switch -glob -- $filename {
+    "*cscope.out" {return "cscope"}
+    "*cs.out" {return "cs"}
+    "*.out" {return $query_backend}
+    "*.dat" {return "xz"}
+    default {return $query_backend}
+  }
+}
+
+##############################################################################
+#
+#  Purpose    : Clear any database specific settings when the database_file
+#               is set.
+#
+#  Parameters : varname - the name of the variable being traced
+#               index - required parameter when used as trace, ignored
+#               op -  required parameter when used as trace, ignored
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc database_file_trace {varname index op} {
+  upvar $varname database_file
+
+  set database_file [file nativename $database_file]
+
+  # Check the backend type
+  global query_backend
+  set query_backend [database_backend $database_file]
+
+  global called_by function_loc
+  catch {unset called_by}
+  catch {unset function_loc}
+
+  # Close the open query and destroy the pipe
+  global query_pipe
+  catch {close $query_pipe}; catch {unset query_pipe}
+
+  # Save the queries associated with the last database and restore the queries
+  # associated with this one.
+  global queries queries_db _last_dbfile
+  if {[info exists _last_dbfile]} {
+    set queries_db($_last_dbfile) [array get queries]
+  }
+  if [info exists queries] {unset queries}
+
+  global tcl_platform
+  if {[strcmp $tcl_platform(platform) "windows"] == 0 || \
+      [strcmp $tcl_platform(platform) "macintosh"] == 0} {
+    set dbase [string tolower $database_file]
+  } else {
+    set dbase $database_file
+  }
+
+  if [info exists queries_db($dbase)] {
+    array set queries $queries_db($dbase)
+  } else {
+    array set queries {}
+  }
+  set _last_dbfile $database_file
+
+  query_recall_menu_setup .query_recall
+}
+
+##############################################################################
+#
+#  Purpose    : Setup the query_recall menu
+#
+#  Parameters : menubutton - the widget path of the menubutton
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc query_recall_menu_setup {menubutton} {
+  global queries query_labels
+
+  $menubutton.menu delete 0 end
+  $menubutton configure -state disabled
+
+  foreach query [array names queries] {
+    set list [split $query ":"]
+    set type [lindex $list 0]
+    set value [lindex $list 1]
+    set qlabel [query_param label $type]
+
+    if {[strcmp $type "DataFile"] == 0} {
+      set label "$qlabel: [file tail $value]"
+    } else {
+      set label "$qlabel: $value"
+    }
+
+    # Add an entry to the recall menu
+    $menubutton.menu add command -label $label \
+        -command "query_recall . $type {$value}"
+
+    $menubutton configure -state normal
+  }
+}
+
+##############################################################################
+#
+#  Purpose    : Open the selected file in the selected editor
+#
+#  Parameters : root - the root widget path
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc edit_selected {root} {
+  global current_file current_line editor editor_commands
+
+  set_root_base $root
+
+  set index $base.file_viewer
+
+  if {[info exists current_file($index)] &&
+      [strlen $current_file($index)] > 0} {
+    set command $editor_commands($editor)
+    regsub "%d" $command $current_line($index) command
+    if ![regsub "%s" $command $current_file($index) command] {
+      set command [concat $command " $current_file($index)"]
+    }
+    eval exec $command &
+    set_message "Opened $current_file($index) with $editor..."
+  } else {
+    tk_messageBox -type ok -icon error -title "No Selected File" \
+        -message "There must be a selected file to edit."
+  }
+}
+
+##############################################################################
+#
+#  Purpose    : Raise a dialog box to prompt for an editor command line and
+#               editor name.
+#
+#  Parameters : toplevel - name of toplevel widget to raise or create
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc editor_dialog {toplevel} {
+
+  if [winfo exists .other_editor] {
+    wm deiconify .other_editor
+    catch {raise .other_editor}
+  } else {
+    set toplevel [toplevel $toplevel]
+    label $toplevel.label -text "Menu label:"
+    entry $toplevel.name_field
+    bind $toplevel.name_field <space> ""
+    message $toplevel.message \
+        -text "Enter the command to use for the editor.  The sequence '%d' will be substituted with the line number and the sequence '%s' will be substituted with the file name.  Use '%%' to insert a percent symbol."
+    bind $toplevel.message <Configure> "$toplevel.message configure -width %w"
+    entry $toplevel.editor_field
+    frame $toplevel.buttonbar
+    button $toplevel.ok -text "OK" -width 8 -command \
+        [subst -nocommands {
+          other_editor [winfo parent $toplevel] \
+              [$toplevel.name_field get] [$toplevel.editor_field get]
+          wm withdraw $toplevel
+        }]
+    button $toplevel.cancel -width 8 -text "Cancel" \
+        -command "wm withdraw $toplevel"
+    grid $toplevel.ok $toplevel.cancel -in $toplevel.buttonbar -padx 5
+
+    pack $toplevel.label -expand yes -fill x -side top -padx 3 -pady 3
+    pack $toplevel.name_field -expand yes -fill x -side top -padx 10 -pady 3
+    pack $toplevel.message -expand yes -fill x -side top -padx 3 -pady 3
+    pack $toplevel.editor_field -expand yes -fill x -side top -padx 10 -pady 3
+    pack $toplevel.buttonbar -expand yes -fill x -side top -padx 3 -pady 3
+
+    bind $toplevel <Return> "$toplevel.ok invoke"
+    bind $toplevel <<Cancel>> "$toplevel.cancel invoke"
+
+    wm title $toplevel "Other Editor"
+    wm geometry $toplevel 360x230
+  }
+}
+
+##############################################################################
+#
+#  Purpose    : Add an alternate editor to the list of editor options.
+#
+#  Parameters : root - the root widget path
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc other_editor {root name command} {
+  global std_editors other_editors editor_commands
+
+  set_root_base $root
+
+  set name [string trim $name]
+  set command [string trim $command]
+
+  if {[llength $name] > 1} {
+    error "Menu label cannot contain spaces."
+  }
+
+  if {[strlen $command] <= 0} {
+    error "Command string must not be empty."
+  }
+
+  if {[llength $name] == 0} {
+    set name [lindex $command 0]
+  }
+
+  if {[lsearch $std_editors $name] < 0 &&
+      [lsearch $other_editors $name] < 0} {
+
+    lappend other_editors $name
+
+    # Add the other editor to the standard menu
+    global editor_menu
+    set index [expr [$editor_menu index end] - 1]
+    $editor_menu insert $index radio -label $name \
+        -variable editor -value $name
+  }
+  set editor_commands($name) $command
+}
+
+##############################################################################
+#
+#  Purpose    : Return query parameters for the current query backend
+#
+#  Parameters : type - the data type to return (command, label, underbar,
+#                      prompt
+#               value - the value to retrieve
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc query_param {type {value ""}} {
+  global query_codes query_cmds query_labels query_underbars query_prompt
+  global query_backend
+
+  switch -glob -- $type {
+    "com*" {return $query_cmds($value)}
+    "cmd"  {return $query_cmds($value)}
+    "lab*" {return $query_labels($value)}
+    "und*" {return $query_underbars($value)}
+    "pro*" {return $query_prompt}
+    default {error "Invalid data type: $type"}
+  }
+}
+
+##############################################################################
+#
+#  Purpose    : Set the query backend and all the associated variables,
+#               including the code_labels, query_cmds, and query_underbars.
+#               Close the open database connection if necessary
+#
+#  Parameters : varname - the name of the variable being traced
+#               index - required parameter when used as trace, ignored
+#               op -  required parameter when used as trace, ignored
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc query_backend_trace {varname index op} {
+  global query_codes query_cmds query_labels query_underbars
+  global query_backend query_pipe query_prompt
+
+  catch {unset query_codes}
+  catch {unset query_cmds}
+  catch {unset query_labels}
+  catch {unset query_underbars}
+
+  upvar $varname backend
+
+  switch -- $backend {
+    "cscope" {
+      query_backend_datum "Symbol"    "Symbols"   "0" 0
+      query_backend_datum "Global"    "Globals"   "1" 0
+      query_backend_datum "CalledBy"  "Called By" "2" 7
+      query_backend_datum "Calling"   "Calling"   "3" 0
+      query_backend_datum "Text"      "Text"      "4" 0
+      query_backend_datum "Egrep"     "Egrep"     "6" 0
+      query_backend_datum "File"      "File"      "7" 0
+      query_backend_datum "Including" "Including" "8" 0
+      query_backend_datum "Datafile"  "Data File" "%" 0
+
+      set query_prompt ">> "
+    }
+    "cs" {
+      query_backend_datum "Symbol"      "Symbols"   "0" 0
+      query_backend_datum "CalledBy"    "Called By" "1" 7
+      query_backend_datum "Calling"     "Calling"   "2" 0
+      query_backend_datum "Text"        "Text"      "3" 0
+      query_backend_datum "Including"   "Including" "4" 0
+      query_backend_datum "File"        "File"      "5" 0
+      query_backend_datum "POSIX"       "POSIX"     "6" 0
+      query_backend_datum "DataFile"    "Data File" "%" 0
+
+#       global query_cmds
+#       set query_cmds(Global)    0 ; # there's no global option for cs so cheat
+
+      set query_prompt ">>>"
+    }
+    "xz" {
+      query_backend_datum "Any"      "All Symbols"           "./**"  0 ;#a
+      query_backend_datum "ID"       "Identifiers"           "./i*"  0 ;#i
+      query_backend_datum "Func"     "Functions"             "./f*"  0 ;#f
+      query_backend_datum "Mod"      "Modules"               "./m*"  0 ;#m
+      query_backend_datum "Res"      "Reserved Words"        "./w*"  9 ;#w
+      query_backend_datum "Ref"      "References"            "./*r"  0 ;#r
+      query_backend_datum "Def"      "Definitions"           "./*d"  0 ;#d
+      query_backend_datum "IDDef"    "ID Definitions"        "./id"  4 ;#e
+      query_backend_datum "IDRef"    "ID References"         "./ir"  9 ;#n
+      query_backend_datum "FunDef"   "Function Definitions"  "./fd"  1 ;#u
+      query_backend_datum "FunRef"   "Function References"   "./fr"  3 ;#c
+      query_backend_datum "ModDef"   "Module Definitions"    "./md"  1 ;#o
+      query_backend_datum "ModRef"   "Module References"     "./mr"  4 ;#l
+      query_backend_datum "DataFile" "Data File"             "%"     0
+
+      set query_prompt "#"
+    }
+    default {
+      error "Backend \"$backend\" not supported."
+    }
+  }
+
+  # Close the open query and destroy the pipe
+  catch {close $query_pipe}; catch {unset query_pipe}
+
+  setup_query_menu .query_type.menu
+
+  global query_type query_cmds query_codes query_label
+  if ![info exists query_cmds($query_type)] {
+    set query_type [lindex $query_codes 0]
+    set query_label $query_labels($query_type)
+  }
+}
+
+##############################################################################
+#
+#  Purpose    : Setup a query configuration datum for the current backend.
+#
+#  Parameters : symbol - the symbol for the query type
+#               label - the readable label for the query type
+#               command - the query command for the backend
+#               underbar - the index of the letter to underline in the menu
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc query_backend_datum {symbol label command underbar} {
+  global query_codes query_cmds query_labels query_underbars
+
+  lappend query_codes $symbol
+  set query_cmds($symbol) $command
+  set query_labels($symbol) $label
+  set query_underbars($symbol) $underbar
+}
+
+# ##############################################################################
+# #
+# #  Purpose    : Set the query_label when the query_type is set
+# #
+# #  Parameters : varname - the name of the variable being traced
+# #               index - required parameter when used as trace, ignored
+# #               op -  required parameter when used as trace, ignored
+# #
+# #  Result     : NONE
+# #
+# ##############################################################################
+# proc query_type_trace {varname index op} {
+#   global query_label query_labels query_type
+#   set query_label $query_labels($query_type)
+# }
+
+##############################################################################
+#
+#  Purpose    : Add an entry to the database history.
+#
+#  Parameters : dbase - the database file to add to the list
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc dbase_history {dbase} {
+  global dbase_history tcl_platform
+
+  if {[strcmp $tcl_platform(platform) "windows"] == 0 || \
+      [strcmp $tcl_platform(platform) "macintosh"] == 0} {
+    set dbase [string tolower $dbase]
+  }
+  set found 0
+  foreach file $dbase_history {
+    # For now just check name equality.  Possibly check for links later.
+    if {[strcmp $file $dbase] == 0} {set found 1; break}
+  }
+  if !$found {lappend dbase_history $dbase}
+}
+
+##############################################################################
+#
+#  Purpose    : Build the dbase recall menu when it is posted
+#
+#  Parameters : menu - the menu widget
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc dbase_menu_post {menu} {
+  global dbase_history
+
+  $menu delete 0 end
+  foreach dbase $dbase_history {
+    if [catch {$menu index $dbase}] {
+      $menu add command -label $dbase \
+          -command "set database_file {$dbase}"
+    }
+  }
+}
+
+##############################################################################
+#
+#  Purpose    : Save all cbrowser options and history lists.
+#
+#  Parameters : NONE
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc save_options {} {
+  global queries queries_db dbase_history database_file
+
+  if [catch {open  "~/.cbrowser" "w" 0600} f] {
+    global argv0
+    puts stderr "$argv0: unable to save to [glob ~/.cbrowser]"
+    exit 1
+  }
+
+  puts $f "\# -*- tcl -*-\n"
+
+  puts $f "\# WARNING: This file is automatically overwritten by cbrowser.\n"
+
+  global save_queries save_query_results
+  if {$save_queries} {
+    set max_num_queries 20
+
+    # Make sure queries_db is up-to-date for the current database.
+    set queries_db($database_file) [array get queries]
+
+    foreach dbindex [array names queries_db] {
+
+      if [info exists tmp_queries] {unset tmp_queries}
+      array set tmp_queries $queries_db($dbindex)
+
+      # Ensure that the most recent queries are saved.
+      set names [array names tmp_queries]
+      history_trim names $max_num_queries
+
+      # @#$%!^&* backslashes!
+      regsub -all {\\} $dbindex {\\\\} dbindex
+
+      puts $f "set queries_db($dbindex) {"
+      
+      foreach index $names {
+        if {[llength $tmp_queries($index)] > 0} {
+          set results $tmp_queries($index)
+
+          # This is a hideous hack but there's no other way to ensure that the
+          # index will be valid when read in again.
+          regsub -all -- {[\]\[ 	$]} $index {\\&} index
+
+          puts -nonewline $f "   {$index} "
+          if {$save_query_results} {
+            puts $f "{"
+            foreach element $results {
+              puts $f "\t{$element} "
+            }
+            puts $f "\t}"
+          } else {
+            puts $f "{}"
+          }
+        }
+      }
+      puts $f "}"
+    }
+    puts $f ""
+  }
+
+  puts $f "set dbase_history \{"
+  foreach name $dbase_history {
+    if {[file exists $name]} {
+      puts $f "   {$name}"
+    }
+  }
+  puts $f "\}"
+
+  global query_hlist
+  if [info exists query_hlist] {
+    history_trim query_hlist 10
+    puts $f "\nset query_hlist \{$query_hlist\}\n"
+  }
+
+  global find_hlist
+  if [info exists find_hlist] {
+    history_trim find_hlist 10
+    puts $f "\nset find_hlist \{$find_hlist\}\n"
+  }
+
+  global code_highlight keyword_highlight save_queries save_query_results
+  puts $f "set code_highlight $code_highlight"
+  puts $f "set keyword_highlight $keyword_highlight"
+  puts $f "set save_queries $save_queries"
+  puts $f "set save_query_results $save_query_results"
+
+  global query_backend
+  puts $f "\nset query_backend $query_backend"
+
+  global other_editors
+  puts $f "\nset other_editors \{$other_editors\}"
+
+  global editor_commands
+  foreach name $other_editors {
+    puts $f "set editor_commands($name) \{$editor_commands($name)\}"
+  }
+  puts $f ""
+
+  global editor
+  puts $f "set editor $editor"
+
+  close $f
+}
+
+##############################################################################
+#
+#  Purpose    : Save options and quit cbrowser.
+#
+#  Parameters : NONE
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc quit_cbrowser {} {
+  save_options
+  exit
+}
+
+##############################################################################
+#
+#  Purpose    : Display a simple dialog about cbrowser.
+#
+#  Parameters : NONE
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc cbrowser_about {} {
+  tk_messageBox -type ok -icon info -title "About Cbrowser" \
+      -message "Cbrowser by Chris Felaco is a source code searching and browsing tool."
+}
+
+##############################################################################
+#
+#  Purpose    : Display help information.
+#
+#  Parameters : type - the category of information to display.
+#
+#  Result     : NONE
+#
+##############################################################################
+
+proc help_proc { type } {
+
+  if {[winfo exists .help_win]} {
+    .help_win.text configure -state normal
+    .help_win.text delete 1.0 end
+    wm deiconify .help_win
+    catch {raise .help_win}
+  } else {
+    toplevel .help_win
+    wm title .help_win "Help"
+    wm geometry .help_win +50+50
+    wm min .help_win 200 200
+    wm max .help_win 1280 1024
+
+    text .help_win.text -relief ridge -padx 2m -pady 2m -wrap word \
+        -yscrollcommand { .help_win.scroll set }
+    scrollbar .help_win.scroll -command {.help_win.text yview} -takefocus 0
+
+    button .help_win.quit -text "Close" -command {wm withdraw .help_win} \
+        -activebackground \#999999 -highlightthickness 1 -pady 1 -padx 1
+
+    grid .help_win.text .help_win.scroll -sticky news
+    grid .help_win.quit -sticky ew
+    grid columnconfigure .help_win 0 -weight 1
+    grid columnconfigure .help_win 1 -weight 0
+    grid rowconfigure .help_win 0 -weight 1
+
+    bind .help_win <Return> ".help_win.quit invoke"
+    bind .help_win <<Cancel>> ".help_win.quit invoke"
+  }
+
+  switch $type {
+    "basic" {
+      .help_win.text insert end "
+Basic Usage:
+
+The browser window is divided into two main parts: the query section, and the browser section.  The query section contains an entry field for entering the query value, and a listbox containing the results.  The browser section contains a text window containing the file selected from the result list.
+
+To perform a query, first enter the text of the query in the query field. Optionally select the query type from the Query menu.  This will determine the type of results the query will yield.  For more information on the types of queries, see the cscope manpage.  Once the query value has been entered, simply press <Enter> or click the Submit button to perform the query.  While the query is in progress, the Query button becomes an Abort button allowing you to cancel long queries.
+
+Once the query is complete, the results will appear in the results list.  You may select a result line using the mouse or the keyboard.  To use the keyboard, the Tab key must be used to give focus to the listbox, or simply select an item in the listbox with the mouse first to give it focus.  As an added convenience, the buttons Next and Previous are provided below to easily scan through the results.
+
+Beside the query field is a recall button.  This provides a menu containing any previous queries performed.  Simply select an item to return to that query. The result list will contain the results of the previously stored query.  This does not resubmit the query to the backend program, so the results appear almost immediately.  If you need to refresh the results because the database has changed, simply resubmit the query.
+
+Tips:
+
+Pressing the Button-2 anywhere in the main window will erase the query field and replace it with the primary selection.  This makes it simple to perform queries on values found in the text.  Double clicking button-2 will also execute the query after setting it to the primary selection.
+"
+}
+
+    "building" {
+      .help_win.text insert end "
+To build a database, you must specify a list of source files and a list of directories where include files are found.  The list of inluded directories is initialized from the environment variable INCLUDEDIRS.  The format of this environment variable is the standard colon separated directory format.  See the cscope manpage for more details on how this variable is used.
+
+The build dialog box allows you to manipulate the source list and include list easily.  The radio-buttons at the top indicate whether the source list or the include list is currently being viewed/modified.  Selecting a radio button switches the contents of the listbox to the selected list.
+
+To add a source file or directory, simply type in a file pattern in the text field and press Enter or click the Add button to add it to the list.  Press the select button to use a file dialog to select a particular file.  Wildcards are used to to add multiple files or directories at once.  The wildcard format is that allowed by the Tcl glob command which is similar to that allowed by csh.
+
+  Symbol                    Meaning
+  ------                    -------
+    ?                       Any single character
+    *                       Any sequence of characters, or no characters
+    \[chars\]                 Any single character in the set chars
+    \\x                      The character x (escapes special meaning)
+    {a,b,...}               Any of the strings a, b, etc.
+    ~user                   The home directory of the specified user
+    ~/                      Your home directory
+
+To remove entries from the list, select them with the mouse or the cursor and press Del or click the Remove button.
+
+Once you are satisfied with the list of directories, simply press OK to perform the build.  A dialog box will appear to track the progress of the build. While the database is being built, a different database may be selected and queried.  You will not be allowed to query from the database currently being built, but be careful not to select the same database with a different pathname, because there is no protection for this.
+"
+}
+    "history" {
+      .help_win.text insert end "
+One of the most useful features of cbrowser is the ability to recall previous selections and results.  All database file selections, queries and even file searches are recorded for later use.  Wherever an entry field is followed by a button with an arrow pointing downward, the values entered into the field are recorded.
+
+To recall previous queries, use the recall menu to the right of the query field.  This will set the query field and fill the result list with the recalled results.  You can then resubmit the query if the results are out of date.
+
+When you leave cbrowser, up to 20 queries from the history are saved and reloaded the next time you use cbrowser.  Some options have been provided for managing the history list to ensure that the most important queries are retained.  The option \"Forget Query\" will discard the currently selected query and its results.  Note that the currently selected query is the query that was last submitted or recalled from the history.  The contents of the query field may not reflect the current query.  For this reason, you are always prompted for confirmation before discarding any query data.  The option \"Forget Query Results\" will discard the current query's results, but retain the query itself for future submission.  This is particularly useful when switching databases.  There are also options to \"Forget All Queries\" and to \"Forget All Query Results\".  Finally, some queries return no results, but they are still retained in the history list.  If these queries were errors, or not needed, you may discard them by selecting \"Forget All Empty Queries\".
+"  
+    }
+    "options" {
+      .help_win.text insert end "
+There are several options that may be configured through the Options menu.  These options are retained from session to session via the ~/.cbrowser initialization file.
+
+The Highlight Syntax option enables C/C++ syntax highlighting in the style of Emacs.  Comments are shown in tan, and quoted strings are shown in green.  If Highlight Keywords is enable also, then keywords are shown in red, builtin type names are shown in brown and preprocessor directives are shown in khaki.  These options may considerably slow down file viewing and consume many system colors.  If your system cannot handle this, disable this option.
+
+The history feature is convenient for recalling previous queries without actually invoking the backend query program.  It is helpful to save queries and query results from session to session.  By enabling \"Save Queries\", you can also enable \"Save Query Results\".  If the former is enabled, but the latter is disabled, you will have to resubmit queries to get the result lists after restarting cbrowser, but the history of the query values will be retained.
+
+You may select any of the listed editors to be used when selecting \"Edit Selected...\".   You may add to the list of editors through the \"Others...\" command.  Simply specify the label to appear in the menu and the command to execute.  The command may contain escape sequences to represent the line number and the file.  The sequence '%d' will be replaced with the line number, and the sequence '%s' will be replaced with the file name.  If no escape sequences are found in the string, the file name is automatically appended to the end of the command.
+
+Cbrowser can use three different backend programs for source code indexing.  The original program is \"cscope\" which can be obtained from http://www.unipress.com/att/new/cscope.html.  The second program cs is a freeware clone that can be found at ftp://cantor.informatik.rwth-aachen.de/pub/unix/.  The third is xz, a program developed by my colleague Andrew Lowe at PSW Technologies.  Each program has slightly different features which will be reflected in the list of options in the \"Query\" menu.
+
+Currently the call tree is only supported with cscope and cs.  Support for xz is requires enhancements to xz which are currently in progress.
+"
+    }
+    "calltree" {
+      .help_win.text insert end "
+The call tree allows you to browse through the hierarchy of functions in the source code.  When a function is selected from the hierarchy pane, its source code is displayed in the viewer.  By double clicking a function node, you can expand or contract it to display or hide the functions it calls.  Within the viewer, the called functions will be underlined.  Clicking on the underlined function will select the corresponding node and view the function.
+
+By default, the root of the tree is at main.  To set the root of the tree to another function, select \"Set Root...\" from the \"Tree\" menu.and enter the function name in the dialog box.
+
+Due to limitations in the query backend programs, it is not always possible to find the source code for every function.  In cases where the function is not available in the source code database, nothing will be displayed.  If a declaration is available, but no definition, the declaration will be displayed.  Occasionally, there is an ambiguity, and a macro or function call will be displayed.
+"
+    }
+  }
+
+  .help_win.text configure -state disabled
+}
+
+#----------------------------------------------------------------------------
+# Main program
+#----------------------------------------------------------------------------
+
+if {[info tclversion] < 7.6} {
+  error "$argv0 requires wish version 7.6 or greater"
+}
+set button_defaults [expr [info tclversion] >= 8.0]
+
+# Set a temp directory
+if [info exists env(TMP)] {
+  if ![file isdirectory $env(TMP)] {
+    error "TMP environment variable is not a directory"
+  }
+  set tmpdir $env(TMP)
+} elseif [info exists env(TEMP)] {
+  if ![file isdirectory $env(TEMP)] {
+    error "TEMP environment variable is not a directory"
+  }
+  set tmpdir $env(TEMP)
+} elseif [file isdirectory "/tmp"] {
+  set tmpdir "/tmp"
+} else {
+  error "Please create /tmp or set TMP to the a directory for temporary files."
+}
+
+# Determine where cbrowser really lives
+set link $argv0
+while {![catch {file readlink $link} result]} {
+  set link [file join [file dirname $link] $result]
+}
+set sourcedir [file dirname $link]
+# Set up the auto_path to find things in the directory where this lives.
+lappend auto_path $sourcedir
+
+# Load the utility library
+source [file join $sourcedir ftcllib.tcl]
+
+catch {
+  switch $tcl_platform(platform) {
+    "unix" {
+      event add <<Cut>> <Control-x> <Key-F20>
+      event add <<Copy>> <Control-c> <Key-F16>
+      event add <<Paste>> <Control-v> <Key-F18>
+      event add <<Help>> <Key-F1> <Key-Help>
+      event add <<Cancel>> <Escape>
+    }
+    "windows" {
+      event add <<Cut>> <Control-x> <Shift-Key-Delete>
+      event add <<Copy>> <Control-c> <Control-Key-Insert>
+      event add <<Paste>> <Control-v> <Shift-Key-Insert>
+      event add <<Help>> <Key-F1> <Key-Help>
+      event add <<Cancel>> <Escape>
+    }
+    "macintosh" {
+      event add <<Cut>> <Control-x> <Key-F2>
+      event add <<Copy>> <Control-c> <Key-F3>
+      event add <<Paste>> <Control-v> <Key-F4>
+      event add <<Help>> <Key-F1> <Key-Help>
+      event add <<Cancel>> <Escape>
+    }
+  }
+}
+
+# This is the simplest way to paste with a pseudo-three-button mouse,
+# but I don't think it's a permanent solution.
+#event add <<Paste>> <Button-3>
+
+# Enabe the scroll wheel on the mouse
+setup_scroll_bindings Text
+
+# Create the arrow image
+catch {
+  set text_mark ""
+  set history_button ""
+
+  set text_mark [image create photo]
+  $text_mark put {
+  { black black black black black black black black black
+    black black black black black black black black black
+    black black black black black black black black black
+  }
+  { black black black black black black black black black
+    black black black black black black black black black
+    \#007700 black black black black black black black black
+  }
+  { black black black black black black black black black
+    black black black black black black black black \#007700
+    \#007700 \#005500 black black black black black black black
+  }
+  { black black black black black black black black black
+    black black black black black black black black black
+    \#007700 \#005500 \#005500 black black black black black black
+  }
+  { black black black black black black black black black
+    black black black black black black black black black
+    black \#005500 \#005500 \#005500 black black black black black
+  }
+  { black black black \#00ff00 black black black \#00ff00 black
+    black black black black black black black black black
+    black black \#005500 \#005500 \#005500 black black black black
+  }
+  { black black black \#00ff00 \#00ff00 \#00ff00 \#00ff00 \#00ff00 \#00ff00
+    \#00ff00 \#00ff00 \#00ab00 \#00ab00 \#00ab00 \#00ab00 \#007700 \#007700 \#007700
+    \#007700 \#005500 \#005500 \#005500 \#005500 black black black black
+  }
+  { black black black black black \#00ff00 black black black
+    \#00ff00 \#00ff00 \#00ab00 \#00ab00 \#00ab00 \#00ab00 \#007700 \#007700 \#007700
+    \#007700 \#005500 \#005500 \#005500 \#005500 black black black black
+  }
+  { black black black black black \#00ff00 \#00ff00 \#00ff00 \#00ff00
+    \#00ff00 \#00ff00 \#00ab00 \#00ab00 \#00ab00 \#00ab00 \#007700 \#007700 \#007700
+    \#007700 \#005500 \#005500 \#005500 \#005500 black black black black
+  }
+  { black black black black black black black \#00ff00 black
+    black black \#00ab00 black black black black black black
+    black black \#005500 \#005500 \#005500 black black black black
+  }
+  {black black black black black black black black black
+    black black black black black black black black black
+    black \#005500 \#005500 \#005500 black black black black black
+  }
+  { black black black black black black black black black
+    black black black black black black black black black
+    \#007700 \#005500 \#005500 black black black black black black
+  }
+  { black black black black black black black black black
+    black black black black black black black black \#007700
+    \#007700 \#005500 black black black black black black black }
+  { black black black black black black black black black
+    black black black black black black black black black
+    \#007700 black black black black black black black black
+  }
+  { black black black black black black black black black
+    black black black black black black black black black
+    black black black black black black black black black }
+  }
+
+  set history_button [image create photo]
+  $history_button put {
+  { \#bebebe \#bebebe \#bebebe \#bebebe \#bebebe
+    \#bebebe \#bebebe \#bebebe \#bebebe \#bebebe
+    \#bebebe \#bebebe \#bebebe \#bebebe \#bebebe
+    \#bebebe \#bebebe }
+  { \#bebebe \#e4e4e4 \#e4e4e4
+    \#e4e4e4 \#e4e4e4 \#e4e4e4 \#e4e4e4 \#e4e4e4
+    \#e4e4e4 \#e4e4e4 \#e4e4e4 \#e4e4e4 \#e4e4e4
+    \#e4e4e4 \#e4e4e4 \#e4e4e4 \#000000 }
+  { \#bebebe
+    \#e4e4e4 \#bebebe \#bebebe \#bebebe \#bebebe
+    \#bebebe \#bebebe \#bebebe \#bebebe \#bebebe
+    \#bebebe \#bebebe \#bebebe \#bebebe \#727272
+    \#000000 }
+  { \#bebebe \#e4e4e4 \#bebebe \#bebebe
+    \#bebebe \#bebebe \#bebebe \#bebebe \#bebebe
+    \#bebebe \#bebebe \#bebebe \#bebebe \#bebebe
+    \#bebebe \#727272 \#000000 }
+  { \#bebebe \#e4e4e4
+    \#bebebe \#bebebe \#bebebe \#bebebe \#bebebe
+    \#bebebe \#bebebe \#bebebe \#bebebe \#bebebe
+    \#bebebe \#bebebe \#bebebe \#727272 \#000000 }
+  {
+    \#bebebe \#e4e4e4 \#bebebe \#bebebe \#bebebe
+    \#bebebe \#bebebe \#bebebe \#bebebe \#bebebe
+    \#bebebe \#bebebe \#bebebe \#bebebe \#bebebe
+    \#727272 \#000000 }
+  { \#bebebe \#e4e4e4 \#bebebe
+    \#bebebe \#bebebe \#bebebe \#bebebe \#bebebe
+    \#bebebe \#bebebe \#bebebe \#bebebe \#bebebe
+    \#bebebe \#bebebe \#727272 \#000000 }
+  { \#bebebe
+    \#e4e4e4 \#bebebe \#bebebe \#bebebe \#bebebe
+    \#bebebe \#bebebe \#bebebe \#bebebe \#bebebe
+    \#bebebe \#bebebe \#bebebe \#bebebe \#727272
+    \#000000 }
+  { \#bebebe \#e4e4e4 \#bebebe \#bebebe
+    \#bebebe \#000000 \#000000 \#000000 \#000000
+    \#000000 \#000000 \#bebebe \#bebebe \#bebebe
+    \#bebebe \#727272 \#000000 }
+  { \#bebebe \#e4e4e4
+    \#bebebe \#bebebe \#bebebe \#bebebe \#000000
+    \#000000 \#000000 \#000000 \#bebebe \#bebebe
+    \#bebebe \#bebebe \#bebebe \#727272 \#000000 }
+  {
+    \#bebebe \#e4e4e4 \#bebebe \#bebebe \#bebebe
+    \#bebebe \#bebebe \#000000 \#000000 \#bebebe
+    \#bebebe \#bebebe \#bebebe \#bebebe \#bebebe
+    \#727272 \#000000 }
+  { \#bebebe \#e4e4e4 \#bebebe
+    \#bebebe \#bebebe \#bebebe \#bebebe \#bebebe
+    \#bebebe \#bebebe \#bebebe \#bebebe \#bebebe
+    \#bebebe \#bebebe \#727272 \#000000 }
+  { \#bebebe
+    \#e4e4e4 \#bebebe \#bebebe \#bebebe \#bebebe
+    \#bebebe \#bebebe \#bebebe \#bebebe \#bebebe
+    \#bebebe \#bebebe \#bebebe \#bebebe \#727272
+    \#000000 }
+  { \#bebebe \#e4e4e4 \#bebebe \#bebebe
+    \#bebebe \#bebebe \#bebebe \#bebebe \#bebebe
+    \#bebebe \#bebebe \#bebebe \#bebebe \#bebebe
+    \#bebebe \#727272 \#000000 }
+  { \#bebebe \#e4e4e4
+    \#bebebe \#bebebe \#bebebe \#bebebe \#bebebe
+    \#bebebe \#bebebe \#bebebe \#bebebe \#bebebe
+    \#bebebe \#bebebe \#bebebe \#727272 \#000000 }
+  {
+    \#bebebe \#e4e4e4 \#727272 \#727272 \#727272
+    \#727272 \#727272 \#727272 \#727272 \#727272
+    \#727272 \#727272 \#727272 \#727272 \#727272
+    \#727272 \#000000 }
+  { \#bebebe \#000000 \#000000
+    \#000000 \#000000 \#000000 \#000000 \#000000
+    \#000000 \#000000 \#000000 \#000000 \#000000
+    \#000000 \#000000 \#000000 \#000000 }
+  { \#344534
+    \#344534 \#344534 \#344534 \#344534 \#344534
+    \#344534 \#344534 \#344534 \#344534 \#344534
+    \#344534 \#344534 \#344534 \#344534 \#344534
+    \#344534 }
+}
+}
+
+# Set up the editor system
+global editor std_editors other_editors
+array set editor_commands {
+  xemacs   {xemacs +%d %s}
+  emacs    {emacs +%d %s}
+  vi       {xterm -e vi +%d %s}
+  dtpad    {dtpad %s}
+  textedit {textedit %s}
+  nedit    {nedit %s}
+}
+set std_editors [array names editor_commands]
+
+# Determine the default editor
+if {[info exists env(VISUAL)]} {
+  set editor $env(VISUAL)
+} elseif {[info exists env(EDITOR)]} {
+  set editor $env(EDITOR)
+} else {
+  set editor vi
+}
+set other_editors ""
+
+# Track the currently selected file and line.
+# When there are no query results listed, these are empty
+global current_file current_line
+#array set current_file
+#array set current_line
+
+# Track all queries performed in this array whose index will be the query type
+# code followed by a colon and the query string.
+global queries
+
+# Track the current query results, the current query string, and the current
+# query type code.
+global current_results current_query current_type
+set current_results ""
+set current_query ""
+set current_type ""
+
+# The query_type is modified by the Query menu.  It is used when a query is
+# invoked.  When the query is complete, current_type will be set to this.
+global query_type
+set query_type ""
+
+# Define the backend program to use - default is cscope, but it will be set when
+# the radio buttons are initialized later.
+global query_backend query_backend_list
+set query_backend "cscope"
+set query_backend_list {cscope cs xz}
+
+# Track the current database file name and a history of each selected database.
+global database_file dbase_history
+set dbase_history ""
+
+global code_highlight keyword_highlight
+set code_highlight 1
+set keyword_highlight 1
+# Make sure the highlight is consistent with the toggles
+trace variable code_highlight w highlight_trace
+trace variable keyword_highlight w highlight_trace
+
+global save_queries save_query_results
+set save_queries 1
+set save_query_results 1
+
+# Construct the main user interface
+cbrowser_ui .
+
+# Track changes to the query_backend
+trace variable query_backend w {query_backend_trace}
+
+# Track changes to the database_file
+trace variable database_file w {database_file_trace}
+
+# Add some convenience keys for entry fields
+bind Entry <Control-BackSpace> "%W delete 0 insert"
+bind Entry <Control-Delete> "%W delete insert end"
+bind Entry <Control-u> "%W delete 0 end"
+
+# Load the configuration file if it exists.
+if {[file exists ~/.cbrowser]} {
+  if [catch {source ~/.cbrowser}] {
+    tk_messageBox -type ok -icon error -title "Error" \
+        -message "Error in ~/.cbrowser.  Some settings may be ignored."
+  }
+}
+
+# Set the default database file and query backend
+if {[llength $argv] > 0} {
+  set database_file [lindex $argv 0]
+  # Expand the relative path
+  if {[strcmp [file pathtype $database_file] "relative"] == 0} {
+    set database_file [file join [pwd] $database_file]
+  }
+} elseif {[file exists "cscope.out"]} {
+  set database_file "[pwd]/cscope.out"
+} elseif {[file exists "cs.out"]} {
+  set database_file "[pwd]/cs.out"
+} elseif {[file exists "xz.dat"]} {
+  set database_file "[pwd]/xz.dat"
+  # If there's something in the history, use that
+} elseif {[llength $dbase_history] > 0} {
+  set database_file [lindex $dbase_history 0]
+} elseif {[info exists query_backend]} {
+  if {[strcmp $query_backend "cscope"] == 0} {
+    # Default to whatever the default backend uses
+    set database_file "[pwd]/cscope.out"
+  } elseif {[strcmp $query_backend "cs"] == 0} {
+    set database_file "[pwd]/cs.out"
+  } elseif {[strcmp $query_backend "xz"] == 0} {
+    set database_file "[pwd]/xz.dat"
+  } else {
+    error "Invalid query_backend \"$query_backend\""
+  }
+}
+
+if ![info exists query_backend] {
+  set query_backend "cscope"
+}
+
+# Add the default database file to the history list, now that the history list
+# has been initialized by the options file.
+if {[llength $database_file] > 0} {
+  dbase_history $database_file
+}
+
+#
+# Check if the default editor is in the list
+if {[lsearch $std_editors $editor] < 0 &&
+    [lsearch $other_editors $editor] < 0} {
+  lappend other_editors $editor
+  set editor_commands($editor) $editor
+}
+# Add the other editors to the standard menu
+foreach name $other_editors {
+  set index [expr [$editor_menu index end] - 1]
+  $editor_menu insert $index radio -label $name \
+      -variable editor -value $name
+}
+
+# Check if this was invoked as tkscope and warn them about the name change.
+if {[regexp "tkscope" [tk appname]] > 0} {
+  tk_messageBox -type ok -default ok \
+      -message "The name of this application has changed to \"cbrowser\".
+Please use this name next time."
+  tk appname "cbrowser"
+  wm title . "cbrowser"
+  wm iconname . "cbrowser"
+}
+
+# Register the window for proper session management
+wm command . "$argv0 $argv"
+wm client . [exec uname -n]
+wm protocol . WM_SAVE_YOURSELF {wm command . "$argv0 $database_file"}
+
+#Local Variables:
+#mode: tcl
+#End:

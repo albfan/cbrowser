@@ -1,0 +1,87 @@
+
+                               * R E A D M E *
+
+   Cbrowser is a C/C++ source code indexing, querying and browsing tool
+   Copyright (C) 2000  B. Christopher Felaco
+   
+   This program is free software; you can redistribute it and/or
+   modify it under the terms of the GNU General Public License
+   as published by the Free Software Foundation; either version 2
+   of the License, or (at your option) any later version.
+   
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+   
+   You should have received a copy of the GNU General Public License
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+   
+   For more information about Cbrowser and it's author see:
+      URL:http://cbrowser.sourceforge.net/
+   
+   Feel free to contact me at URL:mailto:cfelaco@users.sourceforge.net with
+   enhancements or suggestions.
+
+   ----------------------------------------------------------------------------
+
+                                 Megawidgets
+
+   Portions of this software are part of the Megawidget package
+
+      Copyright 1995-1997 Jeffrey Hobbs
+   and
+      Copyright 1997 Jeffrey Hobbs, CADIX International
+
+   Licensing information can be obtained at:
+
+      URL:http://www.cs.uoregon.edu/research/tcl/script/tkcon/docs/license.terms
+
+   For more information and how to get the rest of the package see
+
+       URL:http://www.cs.uoregon.edu/research/tcl/script/widget/
+
+   ----------------------------------------------------------------------------
+
+                                Installation
+
+   Cbrowser is composed of a small number of Tcl source code files.  These 
+   files should be placed into a single directory along with the supplied
+   tclIndex file.  The main entry script, "cbrowser", will determine where it
+   resides at run-time and automatically load the other files as needed.
+
+   The simplest installation is to copy all files into /usr/local/bin or some
+   other common directory that is in your executable search path.  Give the
+   main module "cbrowser" execute permission and start it up.
+
+   Another option is to store all of the files in a subdirectory such as
+   /usr/local/cbrowser-x.x/ and make a symbolic link 
+        /usr/local/bin/cbrowser -> /usr/local/cbrowser-x.x/cbrowser
+   The application will follow the link to the proper directory and the support
+   files will be properly loaded.
+
+   Another option is to keep cbrowser in a separate directory from the support
+   files.  In this case you will need to add the directory where the support
+   files reside to the TCL_PACKAGE_PATH environment variable.  Be sure to
+   include the tclIndex file in the common directory.
+
+   ----------------------------------------------------------------------------
+
+                                    Usage
+
+   The whole point of cbrowser is that it simplifies usage of source code
+   querying tools, therefore it is designed to be self-explanatory.  There is
+   some basic online help available to supplement anything that isn't 
+   intuitively obvious.
+
+   You will need either cscope or cs.  These tools are obtained separately.
+
+     cscope: URL:http://cscope.sourceforge.net/
+     cs: URL:http://cantor.informatik.rwth-aachen.de/~michael/projects/cs.html
+
+   ----------------------------------------------------------------------------
+
+Local Variables:
+mode: indented-text
+End:
