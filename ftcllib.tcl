@@ -1,6 +1,6 @@
 #!/usr/local/bin/wish
 
-# $Id: ftcllib.tcl,v 1.2 2000/07/30 07:38:53 cfelaco Exp $
+# $Id: ftcllib.tcl,v 1.3 2000/09/06 13:45:46 cfelaco Exp $
 
 # Ftcllib is a collection of useful procedures for Tcl/Tk programs.
 # Copyright (C) 1999-2000  B. Christopher Felaco
@@ -26,6 +26,9 @@
 # with enhancements or suggestions.
 
 # $Log: ftcllib.tcl,v $
+# Revision 1.3  2000/09/06 13:45:46  cfelaco
+# Removed debug prints.
+#
 # Revision 1.2  2000/07/30 07:38:53  cfelaco
 # Finally fixed syntax highlighting bug.
 # Updated URLs for Jeff Hobbs' stuff.
@@ -1462,7 +1465,6 @@ proc highlight_word {word color widget {range_start 1.0} {range_end end}} {
 ##############################################################################
 
 proc cpp_highlight {widget} {
-  puts ">>> cpp_highlight"
   set pattern \
       [subst -nocommands -novariables \
            {^[ \t\n]*\#[ \t]*(ifdef|ifndef|if|define|undef|include|endif|else)}]
@@ -1479,7 +1481,6 @@ proc cpp_highlight {widget} {
       set start [$widget index "$start lineend +1 char"]
     }
   }
-  puts "<<< cpp_highlight"
   return
 }
 
