@@ -935,6 +935,13 @@ bind Hierarchy <End>		{ %W xview moveto 1 }
 bind Hierarchy <Control-slash>	{ Hierarchy:SelectAll [winfo parent %W] }
 bind Hierarchy <Control-backslash> { [winfo parent %W] selection clear }
 
+bind Hierarchy <Button-5>       { %W yview scroll 5 units }
+bind Hierarchy <Button-4>       { %W yview scroll -5 units }
+bind Hierarchy <Shift-Button-5> { %W yview scroll 1 units }
+bind Hierarchy <Shift-Button-4> { %W yview scroll -1 units }
+bind Hierarchy <Control-Button-5> { %W yview scroll 1 pages }
+bind Hierarchy <Control-Button-4> { %W yview scroll -1 pages }
+
 bind Hierarchy <2> {
     set tkPriv(x) %x
     set tkPriv(y) %y
