@@ -1,6 +1,6 @@
 # -*- tcl -*-
 
-# $Id: calltree.tcl,v 1.2 2000/07/30 07:38:53 cfelaco Exp $
+# $Id: calltree.tcl,v 1.3 2000/09/06 13:55:24 cfelaco Exp $
 
 # Cbrowser is a C/C++ source code indexing, querying and browsing tool
 # Copyright (C) 1998-2000  B. Christopher Felaco
@@ -26,6 +26,9 @@
 # with enhancements or suggestions.
 
 # $Log: calltree.tcl,v $
+# Revision 1.3  2000/09/06 13:55:24  cfelaco
+# Added message when failed to find function.
+#
 # Revision 1.2  2000/07/30 07:38:53  cfelaco
 # Finally fixed syntax highlighting bug.
 # Updated URLs for Jeff Hobbs' stuff.
@@ -420,6 +423,7 @@ proc calltree_view_node {widget nodepath {showing {}}} {
       set function_loc($function) "$foundfile $foundline"
     } {
       display_clear $base
+      set_message "Could not find definition of $function"
 
       # Store a null value for this function to skip future attempts
       set function_loc($function) ""
