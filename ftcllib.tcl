@@ -1256,7 +1256,7 @@ proc highlight_trace {variable index op} {
 proc c_syntax_highlight {widget} {
   # Search for both style comments, and a quote that is not within a character
   # constant.
-  set start_pattern {/\*|//|[^\\']\"}
+  set start_pattern {/\*|//|[^\\']\"|[^\\"]\'}
   set tagtype "comment"
 
   set temp [$widget search -regexp $start_pattern 1.0]
@@ -1283,7 +1283,7 @@ proc c_syntax_highlight {widget} {
       set temp "$temp + 1chars"
       # By starting at the first quote, this will automatically handle the
       # empty string case.
-      set endrange [$widget search -regexp -- {[^\\]\"} "$temp"]
+      set endrange [$widget search -regexp -- {[^\\]\"|[^\\]\'} "$temp"]
       if {[strlen $endrange] == 0} {
         break
       } else {
