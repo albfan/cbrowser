@@ -619,32 +619,6 @@ proc calltree_destroy {toplevel} {
   destroy $toplevel
 }
 
-set node_closed [image create photo]
-$node_closed put {
-"#d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #000000 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9"
-"#d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #000000 #000000 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9"
-"#d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #000000 #d9d9d9 #000000 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9"
-"#d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #000000 #ffffff #d9d9d9 #000000 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9"
-"#d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #000000 #d9d9d9 #ffffff #d9d9d9 #000000 #d9d9d9 #d9d9d9 #d9d9d9"
-"#d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #000000 #ffffff #d9d9d9 #ffffff #d9d9d9 #000000 #d9d9d9 #d9d9d9"
-"#d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #000000 #d9d9d9 #ffffff #d9d9d9 #000000 #d9d9d9 #d9d9d9 #d9d9d9"
-"#d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #000000 #ffffff #d9d9d9 #000000 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9"
-"#d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #000000 #d9d9d9 #000000 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9"
-"#d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #000000 #000000 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9"
-"#d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #000000 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9"
-}
+set node_open [image create photo node_open -file node_open.gif]
+set node_closed [image create photo node_closed -file node_closed.gif]
 
-set node_open [image create photo]
-$node_open put {
-"#d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9"
-"#d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9"
-"#d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9"
-"#d9d9d9 #000000 #000000 #000000 #000000 #000000 #000000 #000000 #000000 #000000 #000000 #000000"
-"#d9d9d9 #d9d9d9 #000000 #d9d9d9 #ffffff #d9d9d9 #ffffff #d9d9d9 #ffffff #d9d9d9 #000000 #d9d9d9"
-"#d9d9d9 #d9d9d9 #d9d9d9 #000000 #d9d9d9 #ffffff #d9d9d9 #ffffff #d9d9d9 #000000 #d9d9d9 #d9d9d9"
-"#d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #000000 #d9d9d9 #ffffff #d9d9d9 #000000 #d9d9d9 #d9d9d9 #d9d9d9"
-"#d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #000000 #d9d9d9 #000000 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9"
-"#d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #000000 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9"
-"#d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9"
-"#d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9 #d9d9d9"
-}
