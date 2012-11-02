@@ -77,6 +77,8 @@
 #
 ##############################################################################
 
+source "hierarchy.tcl"
+
 proc calltree_dialog {toplevel} {
   global argv0 query_backend
 
@@ -220,7 +222,7 @@ proc calltree_dialog {toplevel} {
       -browsecmd calltree_expand \
       -nodelook  calltree_look \
       -command calltree_view_node \
-      -root main ;#-common 1
+      -root main 
 
   # When a node is selected with a single click, display the file
   bind $toplevel.hier <Button-1>        "+calltree_click %W %x %y"

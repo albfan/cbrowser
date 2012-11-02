@@ -149,6 +149,17 @@ exec wish -f "$0" "$@"
 #
 ##################################################################
 
+# Debugging TODO: add a flag
+
+# rename proc _proc
+# _proc proc {name arglist body} {
+#    uplevel 1 [list _proc $name $arglist $body]
+#       uplevel 1 [list trace add execution $name enterstep [list ::proc_start $name]]
+# }
+# _proc proc_start {name command op} {
+#    puts "$name >> $command"
+# }
+
 proc cbrowser_ui {root} {
 
   set_root_base $root
@@ -3032,6 +3043,8 @@ if {![info exists _freewrap_program]} {
 lappend auto_path $sourcedir
 # Load the utility library
 source [file join $sourcedir "ftcllib.tcl"]
+source [file join $sourcedir "calltree.tcl" ]
+source [file join $sourcedir "builder.tcl" ]
 
 catch {
   switch $tcl_platform(platform) {

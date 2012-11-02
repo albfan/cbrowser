@@ -80,7 +80,7 @@ proc widget { cmd args } {
     }
 }
 
-;proc widget_classes {{pattern "*"}} {
+proc widget_classes {{pattern "*"}} {
     global WIDGET
     set classes {}
     foreach name [array names WIDGET C:$pattern] {
@@ -89,7 +89,7 @@ proc widget { cmd args } {
     return $classes
 }
 
-;proc widget:eval {CLASS w subcmd args} {
+proc widget:eval {CLASS w subcmd args} {
     upvar \#0 $w data
     if {[string match {} [set arg [info commands ${CLASS}_$subcmd]]]} {
 	set arg [info commands ${CLASS}_$subcmd*]
@@ -108,7 +108,7 @@ proc widget { cmd args } {
     }
 }
 
-;proc widget_create:constructor {CLASS} {
+proc widget_create:constructor {CLASS} {
     upvar \#0 $CLASS class
     global WIDGET
 
@@ -219,7 +219,7 @@ proc widget { cmd args } {
     }
 }
 
-;proc widget_create {CLASS} {
+proc widget_create {CLASS} {
     if {![string match {[A-Z]*} $CLASS] || [string match { } $CLASS]} {
 	return -code error "invalid class name \"$CLASS\": it must begin\
 		with a capital letter and contain no spaces"
@@ -734,7 +734,7 @@ widget create ScrolledText
 ## handler.
 ##
 
-;proc ScrolledText:construct {w} {
+proc ScrolledText:construct {w} {
     upvar \#0 $w data
 
     grid $data(text) $data(yscrollbar) -sticky news
@@ -745,7 +745,7 @@ widget create ScrolledText
     bind $data(text) <Configure> [list ScrolledText:resize $w 1]
 }
 
-;proc ScrolledText:configure {w args} {
+proc ScrolledText:configure {w args} {
     upvar \#0 $w data
     set truth {^(1|yes|true|on)$}
     foreach {key val} $args {
@@ -763,14 +763,14 @@ widget create ScrolledText
     }
 }
 
-;proc ScrolledText_xview {w args} {
+proc ScrolledText_xview {w args} {
     upvar \#0 $w data
     if {[catch {uplevel $data(basecmd) xview $args} err]} {
 	return -code error $err
     }
 }
 
-;proc ScrolledText_yview {w args} {
+proc ScrolledText_yview {w args} {
     upvar \#0 $w data
     if {[catch {uplevel $data(basecmd) yview $args} err]} {
 	return -code error $err
@@ -781,21 +781,21 @@ widget create ScrolledText
     }
 }
 
-;proc ScrolledText_insert {w args} {
+proc ScrolledText_insert {w args} {
     upvar \#0 $w data
     set code [catch {uplevel $data(basecmd) insert $args} err]
     if {[winfo ismapped $w]} { ScrolledText:resize $w 0 }
     return -code $code $err
 }
 
-;proc ScrolledText_delete {w args} {
+proc ScrolledText_delete {w args} {
     upvar \#0 $w data
     set code [catch {uplevel $data(basecmd) delete $args} err]
     if {[winfo ismapped $w]} { ScrolledText:resize $w 1 }
     return -code $code $err
 }
 
-;proc ScrolledText:resize {w d} {
+proc ScrolledText:resize {w d} {
     upvar \#0 $w data
     ## Only when deleting should we consider removing the scrollbars
     if {!$data(-autoscrollbar)} return

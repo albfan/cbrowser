@@ -205,6 +205,8 @@
 ## xcnp == extra cnp
 ##-----------------------------------------------------------------------
 
+source "widget.tcl"
+
 #package require Widget 1.0
 package provide Hierarchy 1.11
 
@@ -803,7 +805,8 @@ proc hierarchy_widget {w args} {
 		$c itemconfigure img:$np -image $img
 		lappend tags $img
 		foreach {x y img_width img_height} [$c bbox img:$np] {
-		    incr img_width -$x; incr img_height -$y
+         incr img_width [expr {-1*$x}]
+         incr img_height [expr {-1*$y}]
 		}
 	    }
 	}
@@ -816,7 +819,8 @@ proc hierarchy_widget {w args} {
 	    $c itemconfigure txt:$np -fill $fg -text $txt -font $font
 	    if {[string compare $np $txt]} { lappend tags $txt }
 	    foreach {x y txt_width txt_height} [$c bbox txt:$np] {
-		incr txt_width -$x; incr txt_height -$y
+          incr txt_width [expr {-1*$x}]
+          incr txt_height [expr {-1*$y}]
 	    }
 	}
 	if {[string match {} [$c find withtag box:$np]]} {
@@ -906,7 +910,7 @@ bind Hierarchy <B1-Motion> {
     set tkPriv(y) %y
     Hierarchy:Motion [winfo parent %W] @%x,%y
 }
-bind Hierarchy <ButtonRelease-1> { tkCancelRepeat }
+# bind Hierarchy <ButtonRelease-1> { tkCancelRepeat }
 bind Hierarchy <Shift-1>   { Hierarchy:BeginExtend [winfo parent %W] @%x,%y }
 bind Hierarchy <Control-1> { Hierarchy:BeginToggle [winfo parent %W] @%x,%y }
 bind Hierarchy <B1-Leave> {
@@ -914,7 +918,7 @@ bind Hierarchy <B1-Leave> {
     set tkPriv(y) %y
     Hierarchy:AutoScan [winfo parent %W]
 }
-bind Hierarchy <B1-Enter>	{ tkCancelRepeat }
+# bind Hierarchy <B1-Enter>	{ tkCancelRepeat }
 
 ## Should reserve L/R U/D for traversing nodes
 bind Hierarchy <Up>		{ %W yview scroll -1 units }
