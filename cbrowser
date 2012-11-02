@@ -149,16 +149,18 @@ exec wish -f "$0" "$@"
 #
 ##################################################################
 
-# Debugging TODO: add a flag
+# Debugging TODO: filter what to show
 
-# rename proc _proc
-# _proc proc {name arglist body} {
-#    uplevel 1 [list _proc $name $arglist $body]
-#       uplevel 1 [list trace add execution $name enterstep [list ::proc_start $name]]
-# }
-# _proc proc_start {name command op} {
-#    puts "$name >> $command"
-# }
+if [info exists env(CBROWSER_TRACE)] {
+   rename proc _proc
+   _proc proc {name arglist body} {
+      uplevel 1 [list _proc $name $arglist $body]
+         uplevel 1 [list trace add execution $name enterstep [list ::proc_start $name]]
+   }
+   _proc proc_start {name command op} {
+      puts "$name >> $command"
+   }
+}
 
 proc cbrowser_ui {root} {
 
