@@ -3042,8 +3042,10 @@ if {![info exists _freewrap_program]} {
 # Set up the auto_path to find things in the directory where this lives.
 lappend auto_path $sourcedir
 # Load the utility library
-source [file join $sourcedir "ftcllib.tcl"]
+source [file join $sourcedir "widget.tcl" ]
+source [file join $sourcedir "hierarchy.tcl" ]
 source [file join $sourcedir "calltree.tcl" ]
+source [file join $sourcedir "ftcllib.tcl" ]
 source [file join $sourcedir "builder.tcl" ]
 
 catch {
@@ -3084,9 +3086,9 @@ catch {
   set text_mark ""
   set history_button ""
 
-  set text_mark [image create photo -file text_mark.gif]
+  set text_mark [image create photo -file $sourcedir/text_mark.gif]
 
-  set history_button [image create photo -file history_button.gif]
+  set history_button [image create photo -file $sourcedir/history_button.gif]
 }
 
 # Set up the editor system

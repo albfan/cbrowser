@@ -77,8 +77,6 @@
 #
 ##############################################################################
 
-source "hierarchy.tcl"
-
 proc calltree_dialog {toplevel} {
   global argv0 query_backend
 
@@ -619,6 +617,6 @@ proc calltree_destroy {toplevel} {
   destroy $toplevel
 }
 
-set node_open [image create photo node_open -file node_open.gif]
-set node_closed [image create photo node_closed -file node_closed.gif]
+set node_open [image create photo node_open -file $sourcedir/node_open.gif]
+set node_closed [image create photo node_closed -file $sourcedir/node_closed.gif]
 
