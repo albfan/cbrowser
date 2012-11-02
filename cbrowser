@@ -151,7 +151,7 @@ exec wish -f "$0" "$@"
 
 # Debugging TODO: filter what to show
 
-if [info exists env(CBROWSER_TRACE)] {
+if {[ info exists env(CBROWSER_TRACE) ]} {
    rename proc _proc
    _proc proc {name arglist body} {
       uplevel 1 [list _proc $name $arglist $body]
@@ -2127,7 +2127,14 @@ proc display_file {root file linenum {underlines {}}} {
 
   if {$new_file} {
     # Do the highlights if needed.
-    c_highlights $window
+    upvar 0 ::env(CBROWSER_NOT_HIGHLIGHT) not_highlight
+    if {[info exists not_highlight]} {
+       if { $not_highlight != 1 } {
+          c_highlights $window
+       }
+    } else {
+       c_highlights $window
+    }
 
     # Remove the finder dialog since the text is now different
     if [winfo exists $base.file_viewer.finder] {
