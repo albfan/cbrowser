@@ -1,4 +1,4 @@
-##
+###
 ## hierarchy.tcl
 ## Hierarchical Display Widget
 ##
@@ -205,10 +205,8 @@
 ## xcnp == extra cnp
 ##-----------------------------------------------------------------------
 
-source "widget.tcl"
-
-#package require Widget 1.0
 package provide Hierarchy 1.11
+package require Widget 1.0
 
 ## Create the Hiearchy megawidget class definition
 ##

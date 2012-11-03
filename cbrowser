@@ -3048,11 +3048,12 @@ if {![info exists _freewrap_program]} {
 
 # Set up the auto_path to find things in the directory where this lives.
 lappend auto_path $sourcedir
+
 # Load the utility library
+source [file join $sourcedir "ftcllib.tcl" ]
 source [file join $sourcedir "widget.tcl" ]
 source [file join $sourcedir "hierarchy.tcl" ]
 source [file join $sourcedir "calltree.tcl" ]
-source [file join $sourcedir "ftcllib.tcl" ]
 source [file join $sourcedir "builder.tcl" ]
 
 catch {
